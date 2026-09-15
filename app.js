@@ -287,7 +287,7 @@ function renderDashboard() {
   const focusProject = manualFocus || automaticFocusProject();
   const focusTask = tasks.find(task => !task.done && task.projectId === focusProject?.id);
   return `<div class="page">
-    ${pageHead("下午好，回到工作現場。", "先處理最靠近交付的事情；其餘資料在需要時自然出現。")}
+    ${pageHead("下午好，回到工作現場。", "先專注於最接近交付的工作，其餘資訊會在需要時自然呈現。")}
     <section class="focus-strip" aria-label="今日焦點">
       <div class="focus-primary">
         <button class="focus-project-link" ${focusProject ? `data-project="${escapeHtml(focusProject.id)}"` : "data-route=projects"} aria-label="${focusProject ? `繼續 ${escapeHtml(focusProject.name)}` : "查看專案"}">
