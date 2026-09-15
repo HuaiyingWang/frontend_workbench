@@ -856,7 +856,7 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
-  .sidebar { transform: translateX(-105%); transition: transform .22s ease; }
+  .sidebar { z-index: 55; transform: translateX(-105%); transition: transform .22s ease; }
   .sidebar.is-open { transform: translateX(0); }
   .workspace { grid-column: 1; }
   .topbar { grid-template-columns: 38px minmax(0, 1fr) auto; padding: 0 18px; }
@@ -923,6 +923,10 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .page-side .prototype-badge { display: none; }
   .page-action-group { align-items: stretch; flex-direction: column-reverse; }
   .page-action-group .outline-button, .page-action-group .primary-button { min-height: 44px; }
+  .asset-page .page-head { align-items: stretch; flex-direction: column; gap: 14px; }
+  .asset-page .page-action-group { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .asset-page .page-action-group .outline-button, .asset-page .page-action-group .primary-button { width: 100%; }
+  .asset-page .page-action-group .primary-button span { display: inline; }
   .focus-strip { min-height: 0; margin-bottom: 26px; }
   .focus-project-link { padding: 66px 70px 20px 20px; }
   .focus-switch { top: 14px; right: 14px; min-height: 38px; }

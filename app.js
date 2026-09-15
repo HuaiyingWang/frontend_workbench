@@ -627,7 +627,7 @@ function assetCard(asset) {
 }
 
 function renderAssets() {
-  return `<div class="page">${pageHead("網站素材庫", "收藏值得參考的網站，保留預覽、分類、網址與可套用的設計想法。", `<div class="page-action-group"><button class="outline-button" data-action="manage-categories">管理分類</button><button class="primary-button" data-action="upload" aria-label="收藏網站">${icon("plus")}<span>收藏網站</span></button></div>`)}
+  return `<div class="page asset-page">${pageHead("網站素材庫", "收藏值得參考的網站，保留預覽、分類、網址與可套用的設計想法。", `<div class="page-action-group"><button class="outline-button" data-action="manage-categories">管理分類</button><button class="primary-button" data-action="upload" aria-label="收藏網站">${icon("plus")}<span>收藏網站</span></button></div>`)}
     <div class="toolbar asset-toolbar"><div class="toolbar-group">${["全部", ...siteCategories].map((x, i) => `<button class="filter-chip ${i === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋標題、網域、標籤或用途" aria-label="搜尋網站收藏"></div>
     <section class="asset-grid" data-filter-list>${assets.map(assetCard).join("")}<div class="empty-state in-grid" data-filter-empty hidden><h2>找不到網站</h2><p>換個分類或關鍵字，或收藏新的參考網站。</p></div></section>
   </div>`;
