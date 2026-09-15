@@ -117,6 +117,12 @@ const MEDIA_DELETE_KEY = "studio-ledger-media-deletes-v1";
 let syncPassphrase = "";
 let syncBusy = false;
 let syncStatus = { tone: "idle", title: "尚未連線", detail: "設定 Private Repository 後即可跨裝置同步。" };
+// 最近一次已知的加密連線資訊；尚未用密碼解鎖時上傳沿用這份密文，避免空白資料蓋掉雲端
+let connectionsEnvelope = null;
+let connectionsUnlocked = false;
+let connectionsEdited = false;
+let autoPullCheckedAt = 0;
+const AUTO_PULL_INTERVAL = 30000; // 切回分頁時最多每 30 秒檢查一次，避免耗用 GitHub API 額度
 
 function readJsonStorage(storage, key, fallback) {
   try { return JSON.parse(storage.getItem(key)) || fallback; } catch { return fallback; }
@@ -515,7 +521,7 @@ function renderChecklistTab(project) {
 
 function renderConnectionPanel(project) {
   const connection = projectConnections[project.id];
-  if (!connection) return `<div class="connection-empty"><strong>尚未填入連線資訊</strong><span>建立或編輯專案後，FTP 與 Database 會顯示在這裡。</span><button class="text-button" data-action="edit-connection">加入資訊 ${icon("arrow")}</button></div>`;
+  if (!connection) return `<div class="connection-empty"><strong>尚未填入連線資訊</strong><span>${connectionsEnvelope && !connectionsUnlocked ? "雲端的連線資訊已加密，請到「同步與備份」輸入解密密碼並下載後顯示。" : "建立或編輯專案後，FTP 與 Database 會顯示在這裡。"}</span><button class="text-button" data-action="edit-connection">加入資訊 ${icon("arrow")}</button></div>`;
   return `<div class="connection-panel">
     <button class="connection-field" data-connection-copy="ftp" aria-label="複製 FTP 連線資訊">
       <span class="connection-field-head"><strong>FTP</strong><span>${icon("copy")}點擊複製</span></span>
@@ -945,6 +951,10 @@ function persistLocalData() {
   try {
     const cached = withoutDeviceImages(plainDataSnapshot());
     delete cached.projectConnections;
+    cached.sensitiveConnections = connectionsEnvelope;
+    // 同步版本與資料寫在同一筆，避免其他分頁覆蓋資料後版本號對不上
+    cached.syncedSha = syncConfig.lastSha;
+    cached.syncedHash = syncConfig.syncedHash || "";
     localStorage.setItem(WORKBENCH_CACHE_KEY, JSON.stringify(cached));
   } catch { /* local cache is best effort */ }
 }
@@ -952,7 +962,30 @@ function persistLocalData() {
 function restoreLocalData() {
   const cached = readJsonStorage(localStorage, WORKBENCH_CACHE_KEY, null);
   if (!cached) return;
-  try { applyDataSnapshot(cached, false); } catch { localStorage.removeItem(WORKBENCH_CACHE_KEY); }
+  try { applyDataSnapshot(cached, false); } catch { localStorage.removeItem(WORKBENCH_CACHE_KEY); return; }
+  connectionsEnvelope = cached.sensitiveConnections || null;
+  if ("syncedSha" in cached) Object.assign(syncConfig, { lastSha: cached.syncedSha, syncedHash: cached.syncedHash });
+}
+
+// 本機資料指紋：與最後同步時比對，判斷是否有尚未上傳的修改（FNV-1a）
+function dataFingerprint() {
+  const data = withoutDeviceImages(plainDataSnapshot());
+  delete data.updatedAt;
+  delete data.projectConnections;
+  const text = JSON.stringify(data);
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
+  return (hash >>> 0).toString(36);
+}
+
+function hasUnsyncedChanges() {
+  if (!syncConfig.lastSha && !syncConfig.syncedHash) return false; // 這個瀏覽器從未同步，以雲端為準
+  return connectionsEdited || dataFingerprint() !== syncConfig.syncedHash;
+}
+
+function markSynced() {
+  syncConfig.syncedHash = dataFingerprint();
+  connectionsEdited = false;
 }
 
 function bytesToBase64(bytes) {
@@ -990,22 +1023,36 @@ async function decryptConnections(envelope, passphrase) {
 }
 
 async function portableSnapshot() {
-  if (!syncPassphrase || syncPassphrase.length < 10) throw new Error("請先在同步設定輸入至少 10 個字元的工作台解密密碼。");
   const snapshot = withoutDeviceImages(plainDataSnapshot());
   const connections = snapshot.projectConnections;
   delete snapshot.projectConnections;
-  snapshot.sensitiveConnections = await encryptConnections(connections, syncPassphrase);
   snapshot.mediaPolicy = "github-files-v1";
+  const locked = connectionsEnvelope && !connectionsUnlocked;
+  if (locked && !syncPassphrase && !connectionsEdited) {
+    snapshot.sensitiveConnections = connectionsEnvelope;
+    return snapshot;
+  }
+  if (!syncPassphrase || syncPassphrase.length < 10) throw new Error("請先在同步設定輸入至少 10 個字元的工作台解密密碼。");
+  if (locked) {
+    // 先解開雲端密文再合併本機修改，避免上傳時遺失其他專案的連線資訊
+    replaceRecord(projectConnections, { ...(await decryptConnections(connectionsEnvelope, syncPassphrase)), ...connections });
+    connectionsUnlocked = true;
+  }
+  snapshot.sensitiveConnections = await encryptConnections(structuredClone(projectConnections), syncPassphrase);
+  connectionsEnvelope = snapshot.sensitiveConnections;
   return snapshot;
 }
 
-async function openPortableSnapshot(snapshot) {
+async function openPortableSnapshot(snapshot, allowLocked = false) {
   if (!snapshot?.sensitiveConnections) throw new Error("備份缺少加密的敏感資料區塊。");
-  if (!syncPassphrase) throw new Error("請先輸入建立這份備份時使用的工作台解密密碼。");
+  if (!syncPassphrase && !allowLocked) throw new Error("請先輸入建立這份備份時使用的工作台解密密碼。");
   const opened = structuredClone(snapshot);
-  opened.projectConnections = await decryptConnections(opened.sensitiveConnections, syncPassphrase);
+  if (syncPassphrase) opened.projectConnections = await decryptConnections(opened.sensitiveConnections, syncPassphrase);
   delete opened.sensitiveConnections;
   applyDataSnapshot(opened, true);
+  connectionsEnvelope = snapshot.sensitiveConnections;
+  connectionsUnlocked = Boolean(syncPassphrase);
+  connectionsEdited = false;
 }
 
 function githubHeaders(token) {
@@ -1019,7 +1066,8 @@ function githubPathUrl(repo, path, branch) {
 
 async function githubJson(url, options = {}) {
   const { allowMissing = false, ...fetchOptions } = options;
-  const response = await fetch(url, fetchOptions);
+  // no-store：GitHub API 回應預設可被瀏覽器快取 60 秒，會讀到舊版本
+  const response = await fetch(url, { cache: "no-store", ...fetchOptions });
   if (response.status === 404 && allowMissing) return null;
   let data = null;
   try { data = await response.json(); } catch { /* handled below */ }
@@ -1052,6 +1100,7 @@ async function readGithubStateText(remote, token) {
     }
   }
   const response = await fetch(githubPathUrl(syncConfig.repo, syncConfig.path, syncConfig.branch), {
+    cache: "no-store",
     headers: { ...githubHeaders(token), Accept: "application/vnd.github.raw+json" }
   });
   if (!response.ok) throw new Error(`GitHub 無法讀取工作台資料（${response.status}）。`);
@@ -1063,7 +1112,7 @@ async function readGithubFile(path, token, allowMissing = false) {
 }
 
 async function readGithubBinaryDataUrl(path, token, type = "application/octet-stream") {
-  const response = await fetch(githubPathUrl(syncConfig.repo, path, syncConfig.branch), { headers: { ...githubHeaders(token), Accept: "application/vnd.github.raw+json" } });
+  const response = await fetch(githubPathUrl(syncConfig.repo, path, syncConfig.branch), { cache: "no-store", headers: { ...githubHeaders(token), Accept: "application/vnd.github.raw+json" } });
   if (!response.ok) throw new Error(`GitHub 無法讀取附件（${response.status}）。`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   return `data:${type};base64,${bytesToBase64(bytes)}`;
@@ -1190,7 +1239,7 @@ async function testGithubConnection(form) {
   setSyncStatus("ok", "GitHub 連線成功", remote ? `已找到雲端資料；${branchNote}第一次使用這台裝置時請先下載。` : `${branchNote}${syncConfig.emptyRepository ? "這是空的 Repository，首次上傳將建立分支與資料檔。" : "目前尚未建立資料檔，可上傳目前資料。"}` );
 }
 
-async function pullFromGithub() {
+async function pullFromGithub(allowLocked = false) {
   const token = syncToken();
   const remote = await readGithubState(token);
   const decoded = await readGithubStateText(remote, token);
@@ -1198,10 +1247,11 @@ async function pullFromGithub() {
   let snapshot;
   try { snapshot = JSON.parse(decoded); }
   catch { throw new Error("雲端資料不是完整的 JSON，請回到原裝置重新上傳後再下載。"); }
-  await openPortableSnapshot(snapshot);
+  await openPortableSnapshot(snapshot, allowLocked);
   reconcileMediaDeletes();
   const downloadedImages = await hydrateCloudImages(syncToken());
   const downloadedFiles = await hydrateCloudFiles(syncToken());
+  markSynced();
   syncConfig.lastSha = remote.sha;
   syncConfig.lastSyncedAt = new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
   saveSyncConfig();
@@ -1219,12 +1269,44 @@ async function pushToGithub() {
   const snapshot = await portableSnapshot();
   const content = bytesToBase64(new TextEncoder().encode(JSON.stringify(snapshot, null, 2)));
   const result = await putGithubFile(syncConfig.path, content, token, remote?.sha || "", `Sync Studio Ledger ${new Date().toISOString()}`);
+  markSynced();
   syncConfig.lastSha = result.content.sha;
   syncConfig.emptyRepository = false;
   syncConfig.lastSyncedAt = new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
   saveSyncConfig();
   persistLocalData();
   setSyncStatus("ok", "上傳完成", `目前資料已加密並寫入 Private Repository${uploadedImages ? `，新增 ${uploadedImages} 張圖片` : ""}${uploadedFiles ? `、${uploadedFiles} 個文件` : ""}${deletedImages ? `，清理 ${deletedImages} 個舊媒體` : ""}。`);
+}
+
+/**
+ * 開啟頁面或切回分頁時檢查 GitHub 是否有新版本；本機沒有未上傳的修改才自動套用
+ * @param {boolean} force - 略過間隔與輸入中的檢查（例如剛完成連線測試）
+ */
+async function autoPullFromGithub(force = false) {
+  const token = syncToken();
+  if (!syncConfig.repo || !token || syncBusy) return;
+  if (!force) {
+    const typing = document.activeElement?.matches("input, textarea, select") || drawer.classList.contains("is-open");
+    if (typing || Date.now() - autoPullCheckedAt < AUTO_PULL_INTERVAL) return;
+  }
+  autoPullCheckedAt = Date.now();
+  syncBusy = true;
+  try {
+    const remote = await readGithubState(token, true);
+    if (!remote || remote.sha === syncConfig.lastSha) return;
+    if (hasUnsyncedChanges()) {
+      setSyncStatus("error", "雲端有較新的版本", "這個分頁有尚未上傳的修改，為避免覆蓋沒有自動下載。請確認後手動「從 GitHub 下載」或「上傳目前資料」。");
+      showToast("GitHub 有較新的資料，請到同步設定確認");
+      return;
+    }
+    await pullFromGithub(true);
+    render();
+    showToast(connectionsUnlocked ? "已載入 GitHub 最新資料" : "已載入 GitHub 最新資料；連線資訊需輸入解密密碼後顯示");
+  } catch (error) {
+    setSyncStatus("error", "自動同步未完成", error.message);
+  } finally {
+    syncBusy = false;
+  }
 }
 
 async function exportPortableJson() {
@@ -1887,6 +1969,7 @@ document.addEventListener("click", async event => {
     return;
   }
   if (event.target.closest("[data-sync-pull]")) {
+    if (syncBusy) return;
     syncPassphrase = document.querySelector("#syncPassphrase")?.value || syncPassphrase;
     setSyncBusy(true);
     try { setSyncStatus("busy", "正在下載", "讀取並解密 GitHub 上的工作台資料…"); await pullFromGithub(); showToast("已套用 GitHub 資料"); }
@@ -1895,6 +1978,7 @@ document.addEventListener("click", async event => {
     return;
   }
   if (event.target.closest("[data-sync-push]")) {
+    if (syncBusy) return;
     syncPassphrase = document.querySelector("#syncPassphrase")?.value || syncPassphrase;
     setSyncBusy(true);
     try { setSyncStatus("busy", "正在加密並上傳", "確認雲端版本後寫入目前資料…"); await pushToGithub(); showToast("已同步至 GitHub"); }
@@ -2470,9 +2554,11 @@ document.addEventListener("submit", async event => {
   if (syncForm) {
     event.preventDefault();
     setSyncBusy(true);
-    try { await testGithubConnection(syncForm); showToast("GitHub 連線成功"); }
+    let connected = false;
+    try { await testGithubConnection(syncForm); connected = true; showToast("GitHub 連線成功"); }
     catch (error) { setSyncStatus("error", "連線失敗", error.message); showToast(error.message); }
     finally { setSyncBusy(false); }
+    if (connected) await autoPullFromGithub(true);
     return;
   }
   const checkEditor = event.target.closest("[data-check-form]");
@@ -2818,6 +2904,7 @@ document.addEventListener("submit", async event => {
     const database = values.database.trim();
     if (ftp || database) projectConnections[project.id] = { ftp, database };
     else delete projectConnections[project.id];
+    connectionsEdited = true;
     project.updated = "剛剛";
     closeDrawer();
     render();
@@ -2904,7 +2991,8 @@ function closeMobileMenu() {
 
 restoreLocalData();
 render();
-if (syncConfig.repo && syncToken() && (imageSyncCounts().cloud || fileSyncCounts().cloud)) {
+autoPullFromGithub(true).then(() => {
+  if (!syncConfig.repo || !syncToken() || !(imageSyncCounts().cloud || fileSyncCounts().cloud)) return;
   Promise.all([hydrateCloudImages(syncToken()), hydrateCloudFiles(syncToken())]).then(([imageCount, fileCount]) => {
     if (imageCount || fileCount) {
       persistLocalData();
@@ -2912,4 +3000,9 @@ if (syncConfig.repo && syncToken() && (imageSyncCounts().cloud || fileSyncCounts
       render();
     }
   }).catch(error => setSyncStatus("error", "雲端媒體讀取未完成", error.message));
-}
+});
+
+// 切回這個分頁 / 捷徑視窗時，重新檢查 GitHub 是否有其他裝置上傳的新版本
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") autoPullFromGithub();
+});
