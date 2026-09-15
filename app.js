@@ -181,6 +181,34 @@ function formatProjectUpdated(value, fallback = "尚無紀錄") {
   return raw;
 }
 
+function projectUpdatedTimestamp(project) {
+  const raw = String(project?.updated ?? "").trim();
+  const now = new Date();
+  if (/^剛剛/.test(raw)) return now.getTime();
+  if (/^今天/.test(raw)) return now.getTime();
+  if (/^昨天/.test(raw)) return now.getTime() - 86400000;
+  if (/^\d{10,13}$/.test(raw)) return Number(raw) * (raw.length === 10 ? 1000 : 1);
+  const fullDate = raw.match(/^(\d{4})[-/.]\s*(\d{1,2})[-/.]\s*(\d{1,2})/);
+  if (fullDate) return new Date(Number(fullDate[1]), Number(fullDate[2]) - 1, Number(fullDate[3])).getTime();
+  const shortDate = raw.match(/^(\d{1,2})\s*[/.-]\s*(\d{1,2})$/);
+  if (shortDate) {
+    let date = new Date(now.getFullYear(), Number(shortDate[1]) - 1, Number(shortDate[2]));
+    if (date.getTime() > now.getTime() + 86400000) date = new Date(now.getFullYear() - 1, Number(shortDate[1]) - 1, Number(shortDate[2]));
+    return date.getTime();
+  }
+  return 0;
+}
+
+function automaticFocusProject() {
+  const unfinished = projects.filter(project => project.statusClass !== "done");
+  const candidates = unfinished.length ? unfinished : projects;
+  return candidates.map((project, index) => ({ project, index })).sort((a, b) => projectUpdatedTimestamp(b.project) - projectUpdatedTimestamp(a.project) || a.index - b.index)[0]?.project;
+}
+
+function currentFocusProject() {
+  return projects.find(project => project.isFocus) || automaticFocusProject();
+}
+
 const priorityLabels = { high: "高", medium: "一般", low: "低" };
 const projectStages = [
   { label: "製作中", className: "active", note: "目前正在設計或開發" },
@@ -251,16 +279,20 @@ function renderSettings() {
 
 function renderDashboard() {
   const openTasks = tasks.filter(task => !task.done).length;
-  const focusProject = projects.find(project => project.statusClass === "active") || projects[0];
-  const focusTask = tasks.find(task => !task.done && task.projectId === focusProject?.id) || tasks.find(task => !task.done);
+  const manualFocus = projects.find(project => project.isFocus);
+  const focusProject = manualFocus || automaticFocusProject();
+  const focusTask = tasks.find(task => !task.done && task.projectId === focusProject?.id);
   return `<div class="page">
     ${pageHead("下午好，回到工作現場。", "先處理最靠近交付的事情；其餘資料在需要時自然出現。")}
     <section class="focus-strip" aria-label="今日焦點">
-      <button class="focus-primary" ${focusProject ? `data-project="${escapeHtml(focusProject.id)}"` : "data-route=projects"} aria-label="${focusProject ? `繼續 ${escapeHtml(focusProject.name)}` : "查看專案"}">
-        <span class="focus-label">目前焦點</span>
-        <span class="focus-heading">${escapeHtml(focusTask?.title || focusProject?.name || "建立第一個專案，開始整理工作內容。")}</span>
-        <span class="focus-meta"><span class="status-dot"></span><span>${focusProject ? `${escapeHtml(focusProject.status)} · ${escapeHtml(focusProject.updated || "最近更新")}` : "目前沒有進行中專案"}</span></span>
-      </button>
+      <div class="focus-primary">
+        <button class="focus-project-link" ${focusProject ? `data-project="${escapeHtml(focusProject.id)}"` : "data-route=projects"} aria-label="${focusProject ? `繼續 ${escapeHtml(focusProject.name)}` : "查看專案"}">
+          <span class="focus-label">目前焦點 <small>${manualFocus ? "手動指定" : "自動 · 最近更新"}</small></span>
+          <span class="focus-heading">${escapeHtml(focusTask?.title || focusProject?.name || "建立第一個專案，開始整理工作內容。")}</span>
+          <span class="focus-meta"><span class="status-dot"></span><span>${focusProject ? `${escapeHtml(focusProject.status)} · ${escapeHtml(formatProjectUpdated(focusProject.updated, "最近更新"))}` : "目前沒有進行中專案"}</span></span>
+        </button>
+        <button class="focus-switch" data-action="choose-focus">${icon("edit")}<span>切換焦點</span></button>
+      </div>
       <div class="focus-cell"><span>今日待處理</span><strong>${String(openTasks).padStart(2, "0")}</strong><small>2 件高優先</small></div>
       <div class="focus-cell"><span>進行中專案</span><strong>${String(projects.filter(project => project.statusClass !== "done").length).padStart(2, "0")}</strong><small>${projects.filter(project => project.statusClass === "waiting").length} 件等待確認</small></div>
     </section>
@@ -1554,6 +1586,17 @@ function categoryEditForm(category) {
   return `<form class="form-stack" data-category-form data-old-category="${escapeHtml(category)}"><div class="category-edit-summary"><strong>${escapeHtml(category)}</strong><span>${count} 個網站會同步更新分類名稱</span></div><div class="form-field"><label for="categoryName">分類名稱</label><input id="categoryName" name="categoryName" required maxlength="18" value="${escapeHtml(category)}"><small class="category-form-error" aria-live="polite"></small></div><button class="primary-button drawer-submit" type="submit">儲存分類名稱</button><button class="outline-button drawer-wide-action" type="button" data-action="manage-categories">返回分類列表</button></form>`;
 }
 
+function focusProjectForm() {
+  const manual = projects.find(project => project.isFocus);
+  const automatic = automaticFocusProject();
+  const orderedProjects = [...projects].sort((a, b) => Number(a.statusClass === "done") - Number(b.statusClass === "done") || projectUpdatedTimestamp(b) - projectUpdatedTimestamp(a));
+  return `<form class="form-stack" data-focus-project-form>
+    <div class="focus-choice-note"><span>${icon("bolt")}</span><div><strong>${manual ? `目前手動指定：${escapeHtml(manual.name)}` : "目前使用自動焦點"}</strong><small>手動指定會保留到你下次更改；自動模式會選擇最近有動作、尚未交付的專案。</small></div></div>
+    <div class="form-field"><label for="focusProjectId">焦點專案</label><select id="focusProjectId" name="projectId"><option value="" ${manual ? "" : "selected"}>自動選擇${automatic ? `（目前：${escapeHtml(automatic.name)}）` : ""}</option>${orderedProjects.map(project => `<option value="${escapeHtml(project.id)}" ${manual?.id === project.id ? "selected" : ""}>${escapeHtml(project.name)} · ${escapeHtml(project.status)} · ${escapeHtml(formatProjectUpdated(project.updated))}</option>`).join("")}</select><small>已交付專案也可手動指定，但自動模式會優先略過。</small></div>
+    <button class="primary-button drawer-submit" type="submit">儲存目前焦點</button>
+  </form>`;
+}
+
 function packageForm(pkg = {}) {
   const selectedProjects = pkg.projectIds || (state.route.startsWith("project:") ? [currentProject().id] : []);
   const selectedState = pkg.state || "穩定使用中";
@@ -1681,6 +1724,7 @@ function drawerContent(type, payload) {
     title: "建立新專案",
     body: projectCreateForm()
   };
+  if (type === "choose-focus") return { context: "首頁 · 工作排序", title: "切換目前焦點", body: focusProjectForm() };
   if (type === "edit-project-stage") return {
     context: currentProject().name,
     title: "修改目前階段",
@@ -1962,7 +2006,7 @@ document.addEventListener("click", async event => {
     return;
   }
   const taskId = event.target.closest("[data-task]")?.dataset.task;
-  if (taskId && event.target.closest(".task-check")) { const task = tasks.find(t => t.id === Number(taskId)); if (!task) return; task.done = !task.done; task.age = "剛剛"; task.completedAt = task.done ? "剛剛" : ""; render(); showToast(task.done ? "已完成修改事項，可至已完成紀錄查看" : "已恢復為待處理"); return; }
+  if (taskId && event.target.closest(".task-check")) { const task = tasks.find(t => t.id === Number(taskId)); if (!task) return; task.done = !task.done; task.age = "剛剛"; task.completedAt = task.done ? "剛剛" : ""; const project = projects.find(item => item.id === task.projectId); if (project) project.updated = "剛剛"; render(); showToast(task.done ? "已完成修改事項，可至已完成紀錄查看" : "已恢復為待處理"); return; }
   const reopenRevisionId = event.target.closest("[data-revision-reopen]")?.dataset.revisionReopen;
   if (reopenRevisionId) {
     const task = tasks.find(item => item.id === Number(reopenRevisionId));
@@ -1970,6 +2014,8 @@ document.addEventListener("click", async event => {
     task.done = false;
     task.completedAt = "";
     task.age = "剛剛重新開啟";
+    const project = projects.find(item => item.id === task.projectId);
+    if (project) project.updated = "剛剛";
     render();
     showToast(`已重新開啟並放回${task.column}`);
     return;
@@ -2566,6 +2612,18 @@ document.addEventListener("submit", async event => {
     showToast(`已建立原型專案${images.length ? `，並加入 ${images.length} 張圖片` : ""}`);
     return;
   }
+  const focusProjectEditor = event.target.closest("[data-focus-project-form]");
+  if (focusProjectEditor) {
+    event.preventDefault();
+    const selectedId = new FormData(focusProjectEditor).get("projectId");
+    projects.forEach(project => { delete project.isFocus; });
+    const selected = projects.find(project => project.id === selectedId);
+    if (selected) selected.isFocus = true;
+    closeDrawer();
+    render();
+    showToast(selected ? `目前焦點已切換為「${selected.name}」` : "已改為自動選擇目前焦點");
+    return;
+  }
   const projectStageEditor = event.target.closest("[data-project-stage-form]");
   if (projectStageEditor) {
     event.preventDefault();
@@ -2612,6 +2670,7 @@ document.addEventListener("submit", async event => {
     } else {
       tasks.unshift({ id: Date.now(), ...record });
     }
+    if (selectedProject) selectedProject.updated = "剛剛";
     if (state.route.startsWith("project:")) state.projectTab = "修改事項";
     imageDrafts.delete(uploadKey);
     closeDrawer();
