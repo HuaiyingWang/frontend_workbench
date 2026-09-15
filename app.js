@@ -411,7 +411,7 @@ function renderProjectTab(project) {
       <div class="section-head"><div><h2>環境與存取</h2><span class="meta">點擊資訊框即可複製</span></div><button class="text-button" data-action="edit-connection">${projectConnections[project.id] ? "修改資訊" : "新增資訊"} ${icon("arrow")}</button></div>
       ${renderConnectionPanel(project)}
       <section class="project-utility-group">
-        <div class="section-head"><h2>專案入口</h2><span class="meta">快速開啟與複製</span></div>
+        <div class="section-head"><div><h2>專案入口</h2><span class="meta">快速開啟與複製</span></div><button class="text-button" data-action="edit-project-entry">${project.domain || project.testUrl || project.adminUrl || project.path ? "修改資訊" : "新增資訊"} ${icon("arrow")}</button></div>
         <div class="project-entry-list">${projectEntryRows(project)}</div>
       </section>
       <section class="project-utility-group project-stack-group">
@@ -1503,6 +1503,16 @@ function connectionFormFields(values = {}) {
   </div>`;
 }
 
+function projectEntryForm(project) {
+  return `<form class="form-stack" data-project-entry-form>
+    <div class="form-field"><label for="projectDomain">正式網站</label><input id="projectDomain" name="domain" type="url" value="${escapeHtml(project.domain || "")}" placeholder="https://www.example.com/" inputmode="url" spellcheck="false"><small>已上線網站的公開網址。</small></div>
+    <div class="form-field"><label for="projectTestUrl">測試站</label><input id="projectTestUrl" name="testUrl" type="url" value="${escapeHtml(project.testUrl || "")}" placeholder="https://stage.example.com/" inputmode="url" spellcheck="false"><small>客戶確認或內部測試使用的網址。</small></div>
+    <div class="form-field"><label for="projectAdminUrl">後台入口</label><input id="projectAdminUrl" name="adminUrl" type="url" value="${escapeHtml(project.adminUrl || "")}" placeholder="https://www.example.com/admin/" inputmode="url" spellcheck="false"><small>只保存後台網址；帳號密碼請放在「環境與存取」。</small></div>
+    <div class="form-field"><label for="projectLocalPath">本機資料夾</label><input id="projectLocalPath" name="path" value="${escapeHtml(project.path || "")}" placeholder="C:/Projects/example" spellcheck="false"><small>點擊專案入口時可以快速複製路徑。</small></div>
+    <button class="primary-button drawer-submit" type="submit">儲存專案入口</button>
+  </form>`;
+}
+
 function currentProject() {
   return projects.find(project => state.route === `project:${project.id}`) || projects[0];
 }
@@ -1735,6 +1745,7 @@ function drawerContent(type, payload) {
     title: "FTP 與 Database",
     body: `<form class="form-stack" data-project-connection-form>${connectionFormFields(projectConnections[currentProject().id] || {})}<button class="primary-button drawer-submit" type="submit">儲存連線資訊</button></form>`
   };
+  if (type === "edit-project-entry") return { context: currentProject().name, title: "管理專案入口", body: projectEntryForm(currentProject()) };
   if (type === "add-contact") return { context: currentProject().name, title: "新增聯絡窗口", body: contactForm() };
   if (type === "edit-contact") {
     const contact = (projectContacts[currentProject().id] || []).find(item => item.id === payload.contactId) || {};
@@ -2710,6 +2721,21 @@ document.addEventListener("submit", async event => {
     closeDrawer();
     render();
     showToast(ftp || database ? "已儲存 FTP 與 Database 連線資訊" : "已清除連線資訊");
+    return;
+  }
+  const projectEntryEditor = event.target.closest("[data-project-entry-form]");
+  if (projectEntryEditor) {
+    event.preventDefault();
+    const project = currentProject();
+    const values = Object.fromEntries(new FormData(projectEntryEditor).entries());
+    project.domain = values.domain.trim();
+    project.testUrl = values.testUrl.trim();
+    project.adminUrl = values.adminUrl.trim();
+    project.path = values.path.trim();
+    project.updated = "剛剛";
+    closeDrawer();
+    render();
+    showToast("已更新專案入口");
     return;
   }
   const form = event.target.closest("[data-demo-form]");
