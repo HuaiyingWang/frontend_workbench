@@ -153,6 +153,27 @@ function todayLabel() {
   return new Intl.DateTimeFormat("zh-TW", { month: "long", day: "numeric", weekday: "long" }).format(new Date());
 }
 
+function formatProjectUpdated(value, fallback = "尚無紀錄") {
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+  if (/^(剛剛|今天|昨天|明天|已匯入|最近更新)/.test(raw)) return raw;
+
+  if (/^\d{10,13}$/.test(raw)) {
+    const timestamp = Number(raw) * (raw.length === 10 ? 1000 : 1);
+    const date = new Date(timestamp);
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat("zh-TW", { year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+    }
+  }
+
+  const fullDate = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (fullDate) return `${fullDate[1]} / ${fullDate[2].padStart(2, "0")} / ${fullDate[3].padStart(2, "0")}`;
+
+  const shortDate = raw.match(/^(\d{1,2})\s*[/.-]\s*(\d{1,2})$/);
+  if (shortDate) return `${shortDate[1].padStart(2, "0")} / ${shortDate[2].padStart(2, "0")}`;
+  return raw;
+}
+
 const priorityLabels = { high: "高", medium: "一般", low: "低" };
 
 function formatRevisionDue(date, done = false) {
@@ -260,7 +281,7 @@ function taskRow(task, managed = false) {
 function projectLine(project) {
   return `<button class="project-line" data-project="${project.id}">
     <span class="project-thumb ${project.tone}">${project.code}</span>
-    <span><span class="project-line-title">${project.name}</span><span class="project-line-meta">${project.status} · ${project.updated}</span></span>
+    <span><span class="project-line-title">${project.name}</span><span class="project-line-meta">${project.status} · ${escapeHtml(formatProjectUpdated(project.updated))}</span></span>
     ${icon("arrow", "arrow")}
   </button>`;
 }
@@ -287,7 +308,7 @@ function projectTableRow(project) {
     <span class="table-cell"><span class="status ${project.statusClass}">${project.status}</span></span>
     <span class="table-cell"><strong>${String(projectTaskCount(project.id)).padStart(2, "0")}</strong> 件</span>
     <span class="table-cell">${project.type}</span>
-    <span class="table-cell">${project.updated}</span>
+    <span class="table-cell">${escapeHtml(formatProjectUpdated(project.updated))}</span>
     <span class="icon-button" aria-hidden="true">${icon("arrow")}</span>
   </button>`;
 }
@@ -676,7 +697,7 @@ function convertProjectDeskSnapshot(legacy) {
     const [status, statusClass] = statusMap[project.status] || [project.status || "待確認", "waiting"];
     const code = String(project.name || project.client || "P").replace(/[^A-Za-z0-9\u4e00-\u9fff]/g, "").slice(0, 2).toUpperCase() || String(index + 1).padStart(2, "0");
     const linkedImages = (project.images || []).map(imageId => legacyDataRecord(imagesById.get(String(imageId)), "project-image")).filter(Boolean);
-    return { id, code, name: project.name || `未命名專案 ${index + 1}`, client: project.client || "未填客戶", type: Array.isArray(project.tags) && project.tags.length ? project.tags.join("、") : "舊工具匯入", status, statusClass, updated: String(project.updatedAt || project.createdAt || "已匯入").slice(0, 10), tone: tones[index % tones.length], domain: project.domain || "", testUrl: project.testUrl || "", adminUrl: project.adminUrl || "", host: project.host || "", launchDate: project.launchDate || "", expiryDate: project.expiryDate || "", tags: project.tags || [], note: project.note || "", images: linkedImages };
+    return { id, code, name: project.name || `未命名專案 ${index + 1}`, client: project.client || "未填客戶", type: Array.isArray(project.tags) && project.tags.length ? project.tags.join("、") : "舊工具匯入", status, statusClass, updated: formatProjectUpdated(project.updatedAt || project.createdAt || "已匯入"), tone: tones[index % tones.length], domain: project.domain || "", testUrl: project.testUrl || "", adminUrl: project.adminUrl || "", host: project.host || "", launchDate: project.launchDate || "", expiryDate: project.expiryDate || "", tags: project.tags || [], note: project.note || "", images: linkedImages };
   });
   const importedContacts = {};
   const importedConnections = {};
@@ -795,6 +816,7 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   const taskImages = new Map(tasks.map(item => [String(item.id), item.images]));
   const nextProjects = structuredClone(snapshot.projects);
   const nextTasks = structuredClone(snapshot.tasks);
+  nextProjects.forEach(item => { item.updated = formatProjectUpdated(item.updated); });
   if (preserveImages) {
     nextProjects.forEach(item => { item.images = mergeImages(item.images || [], projectImages.get(item.id) || []); });
     nextTasks.forEach(item => { item.images = mergeImages(item.images || [], taskImages.get(String(item.id)) || []); });
