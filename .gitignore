@@ -1,0 +1,6 @@
+project-desk-*.json
+legacy-import-runner.js
+studio-ledger-backup-*.json
+.impeccable/
+docs/
+api/
