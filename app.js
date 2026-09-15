@@ -955,6 +955,7 @@ function persistLocalData() {
     // 同步版本與資料寫在同一筆，避免其他分頁覆蓋資料後版本號對不上
     cached.syncedSha = syncConfig.lastSha;
     cached.syncedHash = syncConfig.syncedHash || "";
+    cached.remoteHash = syncConfig.remoteHash || "";
     localStorage.setItem(WORKBENCH_CACHE_KEY, JSON.stringify(cached));
   } catch { /* local cache is best effort */ }
 }
@@ -964,18 +965,22 @@ function restoreLocalData() {
   if (!cached) return;
   try { applyDataSnapshot(cached, false); } catch { localStorage.removeItem(WORKBENCH_CACHE_KEY); return; }
   connectionsEnvelope = cached.sensitiveConnections || null;
-  if ("syncedSha" in cached) Object.assign(syncConfig, { lastSha: cached.syncedSha, syncedHash: cached.syncedHash });
+  if ("syncedSha" in cached) Object.assign(syncConfig, { lastSha: cached.syncedSha, syncedHash: cached.syncedHash, remoteHash: cached.remoteHash });
 }
 
-// 本機資料指紋：與最後同步時比對，判斷是否有尚未上傳的修改（FNV-1a）
-function dataFingerprint() {
-  const data = withoutDeviceImages(plainDataSnapshot());
-  delete data.updatedAt;
-  delete data.projectConnections;
+// 資料指紋（FNV-1a）：排除時間戳與加密區塊，只比對實際內容是否相同
+function fingerprintOf(snapshot) {
+  const data = { ...snapshot };
+  ["updatedAt", "projectConnections", "sensitiveConnections", "mediaPolicy"].forEach(key => delete data[key]);
   const text = JSON.stringify(data);
   let hash = 2166136261;
   for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
   return (hash >>> 0).toString(36);
+}
+
+// 本機資料指紋：與最後同步時比對，判斷是否有尚未上傳的修改
+function dataFingerprint() {
+  return fingerprintOf(withoutDeviceImages(plainDataSnapshot()));
 }
 
 function hasUnsyncedChanges() {
@@ -983,8 +988,13 @@ function hasUnsyncedChanges() {
   return connectionsEdited || dataFingerprint() !== syncConfig.syncedHash;
 }
 
-function markSynced() {
+/**
+ * 記錄同步完成時的資料指紋
+ * @param {Object} remoteSnapshot - 實際寫入或讀自 GitHub 的原始 JSON，供下次上傳判斷雲端是否被其他裝置改過
+ */
+function markSynced(remoteSnapshot) {
   syncConfig.syncedHash = dataFingerprint();
+  syncConfig.remoteHash = fingerprintOf(remoteSnapshot);
   connectionsEdited = false;
 }
 
@@ -1251,7 +1261,7 @@ async function pullFromGithub(allowLocked = false) {
   reconcileMediaDeletes();
   const downloadedImages = await hydrateCloudImages(syncToken());
   const downloadedFiles = await hydrateCloudFiles(syncToken());
-  markSynced();
+  markSynced(snapshot);
   syncConfig.lastSha = remote.sha;
   syncConfig.lastSyncedAt = new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
   saveSyncConfig();
@@ -1262,14 +1272,28 @@ async function pullFromGithub(allowLocked = false) {
 async function pushToGithub() {
   const token = syncToken();
   const remote = syncConfig.emptyRepository ? null : await readGithubState(token, true);
-  if (remote && (!syncConfig.lastSha || remote.sha !== syncConfig.lastSha)) throw new Error("GitHub 上有這台裝置尚未下載的版本。請先下載確認，再上傳本機修改。");
+  const remoteChanged = remote && (!syncConfig.lastSha || remote.sha !== syncConfig.lastSha);
+  if (remoteChanged || (remote && !connectionsUnlocked && !connectionsEnvelope)) {
+    let remoteSnapshot = null;
+    try { remoteSnapshot = JSON.parse(await readGithubStateText(remote, token)); } catch { /* 無法解析時視為內容不同 */ }
+    const remoteHash = fingerprintOf(remoteSnapshot);
+    // 雲端內容與上次同步或本機相同（例如其他裝置只是重新加密上傳）時不算衝突
+    if (remoteChanged && remoteHash !== syncConfig.remoteHash && remoteHash !== dataFingerprint()) {
+      throw new Error("GitHub 上有其他裝置修改過的資料。請先「匯出 JSON 備份」保存這個分頁的修改，再下載確認；直接下載會覆蓋尚未上傳的內容。");
+    }
+    // 採用雲端最新的加密連線資訊，上傳時再與本機修改合併，避免清空其他專案的連線資訊
+    if (remoteSnapshot?.sensitiveConnections) {
+      connectionsEnvelope = remoteSnapshot.sensitiveConnections;
+      connectionsUnlocked = false;
+    }
+  }
   const uploadedImages = await uploadPendingImages(token);
   const uploadedFiles = await uploadPendingFiles(token);
   const deletedImages = await removeQueuedImages(token);
   const snapshot = await portableSnapshot();
   const content = bytesToBase64(new TextEncoder().encode(JSON.stringify(snapshot, null, 2)));
   const result = await putGithubFile(syncConfig.path, content, token, remote?.sha || "", `Sync Studio Ledger ${new Date().toISOString()}`);
-  markSynced();
+  markSynced(snapshot);
   syncConfig.lastSha = result.content.sha;
   syncConfig.emptyRepository = false;
   syncConfig.lastSyncedAt = new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
@@ -1295,7 +1319,7 @@ async function autoPullFromGithub(force = false) {
     const remote = await readGithubState(token, true);
     if (!remote || remote.sha === syncConfig.lastSha) return;
     if (hasUnsyncedChanges()) {
-      setSyncStatus("error", "雲端有較新的版本", "這個分頁有尚未上傳的修改，為避免覆蓋沒有自動下載。請確認後手動「從 GitHub 下載」或「上傳目前資料」。");
+      setSyncStatus("error", "雲端有較新的版本", "這個分頁有尚未上傳的修改，為避免覆蓋沒有自動下載。請先按「上傳目前資料」；若沒有要保留的修改，再手動下載。");
       showToast("GitHub 有較新的資料，請到同步設定確認");
       return;
     }
@@ -1970,6 +1994,7 @@ document.addEventListener("click", async event => {
   }
   if (event.target.closest("[data-sync-pull]")) {
     if (syncBusy) return;
+    if (hasUnsyncedChanges() && !window.confirm("這個分頁有尚未上傳的修改，下載會以 GitHub 資料覆蓋且無法復原。\n\n建議先按「上傳目前資料」。確定仍要下載嗎？")) return;
     syncPassphrase = document.querySelector("#syncPassphrase")?.value || syncPassphrase;
     setSyncBusy(true);
     try { setSyncStatus("busy", "正在下載", "讀取並解密 GitHub 上的工作台資料…"); await pullFromGithub(); showToast("已套用 GitHub 資料"); }
