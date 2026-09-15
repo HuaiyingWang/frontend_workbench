@@ -207,7 +207,7 @@ function renderSettings() {
       <aside class="backup-panel">
         <div class="sync-security-note">${icon("lock")}<div><h2>資料保護方式</h2><p>Repository 只會看到密文。工作台解鎖後，仍可正常查看與複製 FTP、Database 原始內容。</p></div></div>
         <div class="backup-ledger"><div><span>同步內容</span><strong>專案、修改、網站、套件、提示詞、筆記</strong></div><div><span>敏感內容</span><strong>瀏覽器 AES-GCM 加密</strong></div><div><span>衝突保護</span><strong>偵測 GitHub 檔案版本</strong></div><div><span>圖片檔案</span><strong>${media.total ? `${media.cloud} / ${media.total} 張已同步` : "WebP 壓縮後獨立保存"}</strong></div></div>
-        <div class="portable-backup"><h2>JSON 攜帶式備份</h2><p>備份包含加密資料與圖片索引；圖片檔本身保留在 Private Repository。正式資料不需要經過聊天。</p><div><button class="outline-button" data-export-json>${icon("download")}匯出備份</button><button class="outline-button" data-import-json>${icon("upload")}匯入備份</button><input type="file" id="jsonImportInput" accept="application/json,.json" hidden></div></div>
+        <div class="portable-backup"><h2>JSON 攜帶式備份</h2><p>可匯入工作台備份、舊版 project-desk，以及收藏收件匣完整備份。私人內容只會進入你的資料庫。</p><div><button class="outline-button" data-export-json>${icon("download")}匯出備份</button><button class="outline-button" data-import-json>${icon("upload")}匯入 JSON</button><input type="file" id="jsonImportInput" accept="application/json,.json" hidden></div></div>
       </aside>
     </div>
   </div>`;
@@ -480,6 +480,12 @@ function normalizeHttpUrl(value) {
   }
 }
 
+function normalizeAssetImage(value) {
+  const source = String(value || "").trim();
+  if (/^data:image\/(?:jpeg|png|webp|gif);/i.test(source)) return source;
+  return normalizeHttpUrl(source);
+}
+
 function resolvePreviewUrl(value, baseUrl) {
   if (!value) return "";
   try {
@@ -539,7 +545,7 @@ async function requestLinkPreview(pageUrl) {
 }
 
 function assetPreview(asset, detail = false) {
-  const previewUrl = normalizeHttpUrl(asset.previewUrl || asset.externalUrl);
+  const previewUrl = normalizeAssetImage(asset.previewUrl || asset.externalUrl);
   const fallbackLabel = asset.preview === "logo" ? (asset.label || assetDomain(asset).slice(0, 5).toUpperCase()) : "";
   return `<span class="asset-preview ${escapeHtml(asset.preview)} ${previewUrl ? "has-external-image" : ""} ${detail ? "asset-preview-detail" : ""}">${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(assetTitle(asset))} 網站預覽" loading="lazy">` : escapeHtml(fallbackLabel)}</span>`;
 }
@@ -693,6 +699,49 @@ function convertProjectDeskSnapshot(legacy) {
     return { id: 7000000000000 + index, title: legacyRevisionTitle(req.content, index), projectId, project: project?.name || "先放入收件匣", dueDate: req.date || "", priority: "medium", column: "收件匣", note: [req.sourceName && `來源：${req.sourceName}`, req.content].filter(Boolean).join("\n"), age: String(req.updatedAt || req.createdAt || "已匯入").slice(0, 10), completedAt: req.done ? String(req.updatedAt || req.date || "已完成").slice(0, 10) : "", done: Boolean(req.done), images: taskImages, attachments };
   });
   return { ...base, updatedAt: new Date().toISOString(), projects: importedProjects, tasks: importedTasks, projectContacts: importedContacts, projectNotes: importedNotes, projectChecklists: importedChecklists, projectConnections: importedConnections };
+}
+
+const collectorCategoryLabels = {
+  course: "AI 課程", prompt: "提示詞", tool: "工具實測", note: "觀念筆記", inbox: "待整理",
+  xmtiexsc9jn1: "日常生活", xmtif0wdxkge: "MiniMax H3", xmtjhw29ybmg: "LINE AI",
+  xmtji3gxei8t: "Gemini 系列", xmtjktwd7t6b: "Claude 系列", xmtmdf0xmv1e: "ChatGPT 系列"
+};
+
+function collectorLinks(item) {
+  return (item.links || []).map(link => typeof link === "string" ? link : link?.url).filter(Boolean);
+}
+
+function collectorImageList(item) {
+  const images = [...(item.covers || []), ...(item.images || [])].map(normalizeAssetImage).filter(Boolean);
+  return [...new Set(images)].filter(image => !image.startsWith("data:image/svg+xml"));
+}
+
+function mergeCollectorSnapshot(snapshot) {
+  if (Number(snapshot?.version) !== 2 || !Array.isArray(snapshot.items)) throw new Error("這不是可辨識的收藏收件匣備份。");
+  const before = assets.length;
+  const existingIds = new Set(assets.map(asset => asset.id));
+  const usedCategories = new Set();
+  snapshot.items.forEach((item, index) => {
+    const category = collectorCategoryLabels[item.category] || "未分類";
+    usedCategories.add(category);
+    const id = legacyId("collector", item.id || index);
+    if (existingIds.has(id)) return;
+    const links = collectorLinks(item);
+    const pageUrl = normalizeHttpUrl(links[0] || item.url) || normalizeHttpUrl(item.url) || "";
+    const referenceImages = collectorImageList(item);
+    const relatedLinks = links.filter(link => normalizeHttpUrl(link) && normalizeHttpUrl(link) !== pageUrl);
+    const noteParts = [item.body, item.note && `收藏原因：${item.note}`, item.author && `作者／來源：${item.author}`, relatedLinks.length && `相關連結：\n${relatedLinks.join("\n")}`].filter(Boolean);
+    assets.push({
+      id, title: item.title || `收藏資料 ${index + 1}`, pageUrl, projectId: "", category,
+      preview: referenceImages[0] ? "photo" : "logo", previewUrl: referenceImages[0] || "", previewSource: "收藏收件匣備份",
+      usage: item.note || (item.stub ? "待補齊內容" : "收藏內容待整理"), source: "收藏收件匣",
+      tags: Array.isArray(item.tags) ? item.tags.join("、") : String(item.tags || ""), note: noteParts.join("\n\n"),
+      label: "", collectorImages: referenceImages, collectorSource: item.source || {}, collectorCapturedAt: item.capturedAt || ""
+    });
+    existingIds.add(id);
+  });
+  usedCategories.forEach(category => { if (!siteCategories.includes(category)) siteCategories.splice(Math.max(0, siteCategories.length - 1), 0, category); });
+  return { added: assets.length - before, total: snapshot.items.length, categories: usedCategories.size };
 }
 
 function cloudImageRecord(image) {
@@ -1880,8 +1929,11 @@ document.addEventListener("change", async event => {
     syncPassphrase = document.querySelector("#syncPassphrase")?.value || syncPassphrase;
     try {
       const source = JSON.parse(await file.text());
+      let collectorResult = null;
       if (source?.app === "project-desk") {
         applyDataSnapshot(convertProjectDeskSnapshot(source), false);
+      } else if (Number(source?.version) === 2 && Array.isArray(source?.items)) {
+        collectorResult = mergeCollectorSnapshot(source);
       } else {
         await openPortableSnapshot(source);
         if (syncToken()) await hydrateCloudImages(syncToken());
@@ -1889,8 +1941,8 @@ document.addEventListener("change", async event => {
       persistLocalData();
       render();
       const legacy = source?.app === "project-desk";
-      setSyncStatus("ok", legacy ? "舊版資料匯入完成" : "備份匯入完成", legacy ? `已匯入 ${projects.length} 個專案與 ${tasks.length} 筆修改；輸入解密密碼後即可上傳 GitHub。` : "已在這台裝置套用 JSON 資料；確認後可再上傳 GitHub。");
-      showToast(legacy ? "project-desk 資料轉換完成" : "已匯入加密 JSON 備份");
+      setSyncStatus("ok", collectorResult ? "收藏資料匯入完成" : legacy ? "舊版資料匯入完成" : "備份匯入完成", collectorResult ? `新增 ${collectorResult.added} 筆收藏、保留 ${collectorResult.categories} 組分類；確認後可上傳 GitHub。` : legacy ? `已匯入 ${projects.length} 個專案與 ${tasks.length} 筆修改；輸入解密密碼後即可上傳 GitHub。` : "已在這台裝置套用 JSON 資料；確認後可再上傳 GitHub。");
+      showToast(collectorResult ? `已新增 ${collectorResult.added} 筆素材收藏` : legacy ? "project-desk 資料轉換完成" : "已匯入加密 JSON 備份");
     } catch (error) { setSyncStatus("error", "匯入未完成", error.message); showToast(error.message); }
     event.target.value = "";
     return;
