@@ -628,14 +628,14 @@ function assetCard(asset) {
 
 function renderAssets() {
   return `<div class="page asset-page">${pageHead("網站素材庫", "收藏值得參考的網站，保留預覽、分類、網址與可套用的設計想法。", `<div class="page-action-group"><button class="outline-button" data-action="manage-categories">管理分類</button><button class="primary-button" data-action="upload" aria-label="收藏網站">${icon("plus")}<span>收藏網站</span></button></div>`)}
-    <div class="toolbar asset-toolbar"><div class="toolbar-group">${["全部", ...siteCategories].map((x, i) => `<button class="filter-chip ${i === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋標題、網域、標籤或用途" aria-label="搜尋網站收藏"></div>
+    <div class="toolbar asset-toolbar library-toolbar"><div class="toolbar-group">${["全部", ...siteCategories].map((x, i) => `<button class="filter-chip ${i === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋標題、網域、標籤或用途" aria-label="搜尋網站收藏"></div>
     <section class="asset-grid" data-filter-list>${assets.map(assetCard).join("")}<div class="empty-state in-grid" data-filter-empty hidden><h2>找不到網站</h2><p>換個分類或關鍵字，或收藏新的參考網站。</p></div></section>
   </div>`;
 }
 
 function renderPackages() {
   return `<div class="page">${pageHead("套件庫", "記住哪些版本真正可靠、在哪些專案使用，以及升級前必須檢查什麼。", `<button class="primary-button" data-action="new-package">${icon("plus")}<span>登記套件</span></button>`)}
-    <div class="toolbar"><div class="toolbar-group">${["全部", "穩定使用中", "有新版待測", "相容限定"].map((x,i)=>`<button class="filter-chip ${i===0?"is-active":""}" data-library-filter="${x}">${x.replace("中","").replace("有新版待測","待測新版")}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋套件" aria-label="搜尋套件"></div>
+    <div class="toolbar library-toolbar"><div class="toolbar-group">${["全部", "穩定使用中", "有新版待測", "相容限定"].map((x,i)=>`<button class="filter-chip ${i===0?"is-active":""}" data-library-filter="${x}">${x.replace("中","").replace("有新版待測","待測新版")}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋套件" aria-label="搜尋套件"></div>
     <section class="package-list" data-filter-list>${packages.map(packageRow).join("")}<div class="empty-state" data-filter-empty hidden><h2>找不到套件</h2><p>換個關鍵字或狀態篩選。</p></div></section>
   </div>`;
 }
@@ -671,7 +671,7 @@ function promptCard(prompt) {
 function renderPrompts() {
   const types = ["全部", ...new Set(prompts.map(prompt => prompt.type))];
   return `<div class="page">${pageHead("提示詞庫", "把有效提示詞當成設計資產：快速複製、關聯專案，修改時保留可回查的舊版本。", `<button class="primary-button" data-action="new-prompt">${icon("plus")}<span>新增提示詞</span></button>`)}
-    <div class="toolbar"><div class="toolbar-group">${types.map((type, index) => `<button class="filter-chip ${index === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(type)}">${escapeHtml(type)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋名稱、模型、變數或內容" aria-label="搜尋提示詞"></div>
+    <div class="toolbar library-toolbar"><div class="toolbar-group">${types.map((type, index) => `<button class="filter-chip ${index === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(type)}">${escapeHtml(type)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋名稱、模型、變數或內容" aria-label="搜尋提示詞"></div>
     <section class="prompt-grid" data-filter-list>${prompts.map(promptCard).join("")}<div class="empty-state in-grid" data-filter-empty ${prompts.length ? "hidden" : ""}><h2>${prompts.length ? "找不到提示詞" : "還沒有提示詞"}</h2><p>${prompts.length ? "換個關鍵字或類型。" : "新增第一組可重複使用的提示詞。"}</p></div></section>
   </div>`;
 }
