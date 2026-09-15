@@ -408,7 +408,7 @@ function renderProjectTab(project) {
     </div>
     <aside>
       ${renderContactSummary(project)}
-      <div class="section-head"><h2>環境與存取</h2><span class="meta">點擊資訊框即可複製</span></div>
+      <div class="section-head"><div><h2>環境與存取</h2><span class="meta">點擊資訊框即可複製</span></div><button class="text-button" data-action="edit-connection">${projectConnections[project.id] ? "修改資訊" : "新增資訊"} ${icon("arrow")}</button></div>
       ${renderConnectionPanel(project)}
       <section class="project-utility-group">
         <div class="section-head"><h2>專案入口</h2><span class="meta">快速開啟與複製</span></div>
@@ -521,7 +521,7 @@ function renderConnectionPanel(project) {
       <span class="connection-field-head"><strong>DATABASE</strong><span>${icon("copy")}點擊複製</span></span>
       <code>${escapeHtml(connection.database || "尚未填入 Database 資訊")}</code>
     </button>
-    <p class="security-note">目前為原型假資料。正式版應加密保存密碼，且預設遮蔽敏感內容。</p>
+    <p class="security-note">FTP 與 Database 會在瀏覽器內加密後，再隨「上傳目前資料」同步到 Private Repository。</p>
   </div>`;
 }
 
@@ -1493,11 +1493,11 @@ function connectionFormFields(values = {}) {
     <div class="form-section-head"><strong>環境與存取</strong><span>可稍後補填</span></div>
     <div class="form-field">
       <div class="form-label-row"><label for="projectFtp">FTP 連線資訊</label><button type="button" class="field-copy-button" data-copy-source="projectFtp" aria-label="複製 FTP 連線資訊">${icon("copy")}複製</button></div>
-      <textarea id="projectFtp" name="ftp" rows="5" spellcheck="false" placeholder="Host:&#10;User:&#10;Password:&#10;Port:&#10;Path:">${values.ftp || ""}</textarea>
+      <textarea id="projectFtp" name="ftp" rows="5" spellcheck="false" placeholder="Host:&#10;User:&#10;Password:&#10;Port:&#10;Path:">${escapeHtml(values.ftp || "")}</textarea>
     </div>
     <div class="form-field">
       <div class="form-label-row"><label for="projectDatabase">Database 連線資訊</label><button type="button" class="field-copy-button" data-copy-source="projectDatabase" aria-label="複製 Database 連線資訊">${icon("copy")}複製</button></div>
-      <textarea id="projectDatabase" name="database" rows="5" spellcheck="false" placeholder="Host:&#10;Database:&#10;User:&#10;Password:&#10;Charset: utf8mb4">${values.database || ""}</textarea>
+      <textarea id="projectDatabase" name="database" rows="5" spellcheck="false" placeholder="Host:&#10;Database:&#10;User:&#10;Password:&#10;Charset: utf8mb4">${escapeHtml(values.database || "")}</textarea>
     </div>
     <p class="security-note">正式版應加密保存密碼，列表與預覽畫面預設遮蔽敏感內容。</p>
   </div>`;
@@ -1733,7 +1733,7 @@ function drawerContent(type, payload) {
   if (type === "edit-connection") return {
     context: "專案設定",
     title: "FTP 與 Database",
-    body: `<form class="form-stack" data-demo-form="連線資訊">${connectionFormFields()}<button class="primary-button drawer-submit" type="submit">儲存原型資料</button></form>`
+    body: `<form class="form-stack" data-project-connection-form>${connectionFormFields(projectConnections[currentProject().id] || {})}<button class="primary-button drawer-submit" type="submit">儲存連線資訊</button></form>`
   };
   if (type === "add-contact") return { context: currentProject().name, title: "新增聯絡窗口", body: contactForm() };
   if (type === "edit-contact") {
@@ -2695,6 +2695,21 @@ document.addEventListener("submit", async event => {
     closeDrawer();
     render();
     showToast(existingId ? "已更新聯絡窗口" : "已新增聯絡窗口");
+    return;
+  }
+  const connectionEditor = event.target.closest("[data-project-connection-form]");
+  if (connectionEditor) {
+    event.preventDefault();
+    const project = currentProject();
+    const values = Object.fromEntries(new FormData(connectionEditor).entries());
+    const ftp = values.ftp.trim();
+    const database = values.database.trim();
+    if (ftp || database) projectConnections[project.id] = { ftp, database };
+    else delete projectConnections[project.id];
+    project.updated = "剛剛";
+    closeDrawer();
+    render();
+    showToast(ftp || database ? "已儲存 FTP 與 Database 連線資訊" : "已清除連線資訊");
     return;
   }
   const form = event.target.closest("[data-demo-form]");
