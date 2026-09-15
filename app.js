@@ -998,8 +998,18 @@ async function readGithubState(token, allowMissing = false) {
 }
 
 async function readGithubStateText(remote, token) {
+  if (!remote || Array.isArray(remote) || remote.type !== "file") {
+    throw new Error("資料路徑沒有指向 JSON 檔案，請確認兩台裝置的「JSON 儲存路徑」完全相同。");
+  }
   if (remote?.content && remote.encoding === "base64") {
     return new TextDecoder().decode(base64ToBytes(remote.content));
+  }
+  if (remote.git_url || remote.sha) {
+    const blobUrl = remote.git_url || `https://api.github.com/repos/${syncConfig.repo}/git/blobs/${remote.sha}`;
+    const blob = await githubJson(blobUrl, { headers: githubHeaders(token) });
+    if (blob?.content && blob.encoding === "base64") {
+      return new TextDecoder().decode(base64ToBytes(blob.content));
+    }
   }
   const response = await fetch(githubPathUrl(syncConfig.repo, syncConfig.path, syncConfig.branch), {
     headers: { ...githubHeaders(token), Accept: "application/vnd.github.raw+json" }
