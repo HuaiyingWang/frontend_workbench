@@ -1,4 +1,5 @@
 project-desk-*.json
+collector-backup*.json
 legacy-import-runner.js
 studio-ledger-backup-*.json
 .impeccable/
