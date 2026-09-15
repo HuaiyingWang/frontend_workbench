@@ -677,6 +677,31 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .image-upload-item > button { position: absolute; right: 7px; bottom: 7px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; color: var(--muted); background: var(--sheet); border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
 .image-upload-item > button:hover { color: var(--danger); border-color: var(--danger); }
 .image-upload-item > button svg { width: 13px; height: 13px; }
+.file-upload-field { display: grid; gap: 9px; margin-top: 4px; padding-top: 20px; border-top: 2px solid var(--ink); }
+.file-drop-zone { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 82px; padding: 14px; background: #f3f1e8; border: 1px dashed var(--line-strong); border-radius: 10px; cursor: pointer; transition: background .18s ease, border-color .18s ease; }
+.file-drop-zone:hover, .file-drop-zone.is-dragging { background: #f3f7d9; border-color: #8f9d3a; }
+.file-drop-zone:focus-visible { outline: 3px solid color-mix(in srgb, var(--focus) 32%, transparent); outline-offset: 2px; }
+.file-drop-icon { width: 42px; height: 42px; display: grid; place-items: center; color: #f5f4ec; background: #2b2e29; border-radius: 10px; }
+.file-drop-icon svg { width: 19px; height: 19px; }
+.file-drop-zone > div strong, .file-drop-zone > div span { display: block; }
+.file-drop-zone > div strong { font-size: 13px; }
+.file-drop-zone > div span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.file-drop-zone .outline-button { min-height: 38px; white-space: nowrap; }
+.file-upload-list { display: grid; gap: 7px; }
+.file-upload-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; overflow: hidden; background: #fbf9f2; border: 1px solid var(--line); border-radius: 9px; }
+.file-download { min-width: 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 11px; color: inherit; background: transparent; border: 0; text-align: left; cursor: pointer; }
+.file-download:hover { background: var(--panel); }
+.file-mark { width: 34px; height: 34px; display: grid; place-items: center; color: var(--signal-deep); background: var(--signal); border-radius: 8px; }
+.file-mark svg { width: 15px; height: 15px; }
+.file-download strong, .file-download small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-download strong { font-size: 13px; }
+.file-download small { margin-top: 2px; color: var(--muted); font-size: 10px; }
+.file-remove { width: 38px; height: 38px; display: grid; place-items: center; margin-right: 7px; color: var(--muted); background: transparent; border: 0; border-radius: 8px; cursor: pointer; }
+.file-remove:hover { color: var(--danger); background: #f6e4df; }
+.file-remove svg { width: 14px; height: 14px; }
+.detail-media { display: grid; gap: 10px; margin-top: 18px; padding-top: 18px; border-top: 2px solid var(--ink); }
+.detail-media-images { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.detail-media-images img, .detail-media-images .cloud-image-loading { width: 100%; min-height: 112px; height: 112px; display: grid; object-fit: cover; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; }
 .drawer-submit { width: 100%; margin-top: 8px; }
 .project-image-section { margin-top: 28px; }
 .project-image-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
@@ -922,7 +947,10 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .image-drop-zone { grid-template-columns: 40px minmax(0, 1fr); align-items: start; }
   .image-drop-icon { width: 40px; height: 40px; }
   .image-upload-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
+  .file-drop-zone { grid-template-columns: 40px minmax(0, 1fr); }
+  .file-drop-zone .outline-button { grid-column: 1 / -1; width: 100%; min-height: 44px; }
   .image-upload-preview { grid-template-columns: 1fr; }
+  .detail-media-images { grid-template-columns: 1fr; }
   .image-upload-item img { height: 170px; }
   .project-image-grid { grid-template-columns: 1fr 1fr; }
   .project-summary { grid-template-columns: 1fr; }

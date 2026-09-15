@@ -99,9 +99,13 @@ const toast = document.querySelector("#toast");
 let toastTimer;
 let drawerReturnFocus = null;
 const imageDrafts = new Map();
+const fileDrafts = new Map();
 const MAX_FORM_IMAGES = 8;
 const MAX_FORM_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_FORM_IMAGE_TOTAL_BYTES = 24 * 1024 * 1024;
+const MAX_FORM_FILES = 8;
+const MAX_FORM_FILE_BYTES = 15 * 1024 * 1024;
+const MAX_FORM_FILE_TOTAL_BYTES = 40 * 1024 * 1024;
 const WORKBENCH_CACHE_KEY = "studio-ledger-data-v1";
 const SYNC_CONFIG_KEY = "studio-ledger-github-config-v1";
 const SYNC_TOKEN_KEY = "studio-ledger-github-token-v1";
@@ -138,13 +142,16 @@ function saveSyncConfig() {
   localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(syncConfig));
 }
 
-function queueMediaDeletes(images = []) {
-  images.filter(image => image.cloudPath).forEach(image => pendingMediaDeletes.add(image.cloudPath));
+function queueMediaDeletes(media = []) {
+  media.filter(item => item.cloudPath).forEach(item => pendingMediaDeletes.add(item.cloudPath));
   localStorage.setItem(MEDIA_DELETE_KEY, JSON.stringify([...pendingMediaDeletes]));
 }
 
 function reconcileMediaDeletes() {
-  const referenced = new Set(allImageOwners().flatMap(owner => owner.images.map(image => image.cloudPath).filter(Boolean)));
+  const referenced = new Set([
+    ...allImageOwners().flatMap(owner => owner.images.map(image => image.cloudPath).filter(Boolean)),
+    ...allFileOwners().flatMap(owner => owner.files.map(file => file.cloudPath).filter(Boolean))
+  ]);
   referenced.forEach(path => pendingMediaDeletes.delete(path));
   localStorage.setItem(MEDIA_DELETE_KEY, JSON.stringify([...pendingMediaDeletes]));
 }
@@ -209,6 +216,7 @@ function syncStatusMarkup() {
 function renderSettings() {
   const connected = Boolean(syncConfig.repo && syncToken());
   const media = imageSyncCounts();
+  const documents = fileSyncCounts();
   return `<div class="page settings-page">
     ${pageHead("同步與備份", "用一個只屬於你的 GitHub Private Repository，讓工作台資料安全地跨裝置接續。", `<button class="outline-button" data-export-json>${icon("download")}<span>匯出 JSON 備份</span></button>`)}
     <div class="settings-layout">
@@ -230,11 +238,11 @@ function renderSettings() {
           <button class="sync-action" data-sync-pull ${connected && !syncBusy ? "" : "disabled"}><span>${icon("download")}</span><strong>從 GitHub 下載</strong><small>以雲端資料更新這台裝置</small></button>
           <button class="sync-action is-primary" data-sync-push ${connected && !syncBusy ? "" : "disabled"}><span>${icon("upload")}</span><strong>上傳目前資料</strong><small>加密後寫入 Private Repository</small></button>
         </div>
-        <p class="sync-footnote">最後同步：${escapeHtml(syncConfig.lastSyncedAt || "尚未同步")} · ${media.total ? `${media.cloud} 張已在雲端，${media.pending} 張等待上傳` : "目前沒有待同步圖片"}。</p>
+        <p class="sync-footnote">最後同步：${escapeHtml(syncConfig.lastSyncedAt || "尚未同步")} · ${media.total ? `${media.cloud} 張圖片已在雲端，${media.pending} 張等待上傳` : "沒有待同步圖片"}；${documents.total ? `${documents.cloud} 個文件已在雲端，${documents.pending} 個等待上傳` : "沒有待同步文件"}。</p>
       </section>
       <aside class="backup-panel">
         <div class="sync-security-note">${icon("lock")}<div><h2>資料保護方式</h2><p>Repository 只會看到密文。工作台解鎖後，仍可正常查看與複製 FTP、Database 原始內容。</p></div></div>
-        <div class="backup-ledger"><div><span>同步內容</span><strong>專案、修改、網站、套件、提示詞、筆記</strong></div><div><span>敏感內容</span><strong>瀏覽器 AES-GCM 加密</strong></div><div><span>衝突保護</span><strong>偵測 GitHub 檔案版本</strong></div><div><span>圖片檔案</span><strong>${media.total ? `${media.cloud} / ${media.total} 張已同步` : "WebP 壓縮後獨立保存"}</strong></div></div>
+        <div class="backup-ledger"><div><span>同步內容</span><strong>專案、修改、網站、套件、提示詞、筆記、圖片與附件</strong></div><div><span>敏感內容</span><strong>瀏覽器 AES-GCM 加密</strong></div><div><span>衝突保護</span><strong>偵測 GitHub 檔案版本</strong></div><div><span>圖片檔案</span><strong>${media.total ? `${media.cloud} / ${media.total} 張已同步` : "WebP 壓縮後獨立保存"}</strong></div><div><span>附件文件</span><strong>${documents.total ? `${documents.cloud} / ${documents.total} 個已同步` : "原始格式獨立保存"}</strong></div></div>
         <div class="portable-backup"><h2>JSON 攜帶式備份</h2><p>可匯入工作台備份、舊版 project-desk，以及收藏收件匣完整備份。私人內容只會進入你的資料庫。</p><div><button class="outline-button" data-export-json>${icon("download")}匯出備份</button><button class="outline-button" data-import-json>${icon("upload")}匯入 JSON</button><input type="file" id="jsonImportInput" accept="application/json,.json" hidden></div></div>
       </aside>
     </div>
@@ -605,7 +613,12 @@ function packageStateClass(stateValue) {
 }
 
 function packageProjectLabel(pkg) {
-  return `${pkg.projectIds.length} 個專案`;
+  const media = mediaCountLabel(pkg);
+  return `${pkg.projectIds.length} 個專案${media ? ` · ${media}` : ""}`;
+}
+
+function mediaCountLabel(record) {
+  return [record.images?.length ? `${record.images.length} 圖` : "", record.files?.length ? `${record.files.length} 文件` : ""].filter(Boolean).join(" · ");
 }
 
 function packageRow(pkg) {
@@ -618,8 +631,9 @@ function packageRow(pkg) {
 
 function promptCard(prompt) {
   const version = (prompt.history?.length || 0) + 1;
+  const media = mediaCountLabel(prompt);
   const search = `${prompt.title} ${prompt.type} ${prompt.model} ${prompt.body} ${prompt.note} ${prompt.variables.join(" ")}`;
-  return `<article class="prompt-card" data-category="${escapeHtml(prompt.type)}" data-search="${escapeHtml(search)}"><button class="prompt-open" data-prompt="${prompt.id}" aria-label="查看 ${escapeHtml(prompt.title)}"><span class="prompt-card-head"><span class="prompt-type">${escapeHtml(prompt.type)}</span><span>v${version} · ${escapeHtml(prompt.updated)}</span></span><span class="prompt-title">${escapeHtml(prompt.title)}</span><span class="prompt-copy">${escapeHtml(prompt.body)}</span><span class="prompt-card-foot"><span class="variables">${prompt.variables.slice(0, 3).map(v => `<span>{{${escapeHtml(v)}}}</span>`).join("")}</span><span>${escapeHtml(prompt.model)}</span></span></button><div class="prompt-actions"><button data-copy-prompt="${prompt.id}">${icon("copy")}複製</button><button data-prompt-edit="${prompt.id}">修改</button><button class="prompt-delete" data-prompt-delete="${prompt.id}">刪除</button></div></article>`;
+  return `<article class="prompt-card" data-category="${escapeHtml(prompt.type)}" data-search="${escapeHtml(search)}"><button class="prompt-open" data-prompt="${prompt.id}" aria-label="查看 ${escapeHtml(prompt.title)}"><span class="prompt-card-head"><span class="prompt-type">${escapeHtml(prompt.type)}</span><span>v${version} · ${escapeHtml(prompt.updated)}${media ? ` · ${escapeHtml(media)}` : ""}</span></span><span class="prompt-title">${escapeHtml(prompt.title)}</span><span class="prompt-copy">${escapeHtml(prompt.body)}</span><span class="prompt-card-foot"><span class="variables">${prompt.variables.slice(0, 3).map(v => `<span>{{${escapeHtml(v)}}}</span>`).join("")}</span><span>${escapeHtml(prompt.model)}</span></span></button><div class="prompt-actions"><button data-copy-prompt="${prompt.id}">${icon("copy")}複製</button><button data-prompt-edit="${prompt.id}">修改</button><button class="prompt-delete" data-prompt-delete="${prompt.id}">刪除</button></div></article>`;
 }
 
 function renderPrompts() {
@@ -780,17 +794,40 @@ function cloudImageRecord(image) {
   return record;
 }
 
+function cloudFileRecord(file) {
+  const record = { id: file.id, name: file.name, type: file.type || "application/octet-stream", size: file.size };
+  if (file.cloudPath) record.cloudPath = file.cloudPath;
+  return record;
+}
+
 function withoutDeviceImages(snapshot) {
   const copy = structuredClone(snapshot);
   copy.projects.forEach(project => { if (project.images) project.images = project.images.map(cloudImageRecord); });
   copy.tasks.forEach(task => { if (task.images) task.images = task.images.map(cloudImageRecord); });
+  copy.packages.forEach(pkg => {
+    if (pkg.images) pkg.images = pkg.images.map(cloudImageRecord);
+    if (pkg.files) pkg.files = pkg.files.map(cloudFileRecord);
+  });
+  copy.prompts.forEach(prompt => {
+    if (prompt.images) prompt.images = prompt.images.map(cloudImageRecord);
+    if (prompt.files) prompt.files = prompt.files.map(cloudFileRecord);
+  });
   return copy;
 }
 
 function allImageOwners() {
   return [
     ...projects.map(project => ({ kind: "projects", ownerId: project.id, images: project.images || [] })),
-    ...tasks.map(task => ({ kind: "revisions", ownerId: String(task.id), images: task.images || [] }))
+    ...tasks.map(task => ({ kind: "revisions", ownerId: String(task.id), images: task.images || [] })),
+    ...packages.map(pkg => ({ kind: "packages", ownerId: pkg.id, images: pkg.images || [] })),
+    ...prompts.map(prompt => ({ kind: "prompts", ownerId: prompt.id, images: prompt.images || [] }))
+  ];
+}
+
+function allFileOwners() {
+  return [
+    ...packages.map(pkg => ({ kind: "packages", ownerId: pkg.id, files: pkg.files || [] })),
+    ...prompts.map(prompt => ({ kind: "prompts", ownerId: prompt.id, files: prompt.files || [] }))
   ];
 }
 
@@ -799,10 +836,22 @@ function imageSyncCounts() {
   return { total: images.length, cloud: images.filter(image => image.cloudPath).length, pending: images.filter(image => image.dataUrl && !image.cloudPath).length };
 }
 
+function fileSyncCounts() {
+  const files = allFileOwners().flatMap(owner => owner.files);
+  return { total: files.length, cloud: files.filter(file => file.cloudPath).length, pending: files.filter(file => file.dataUrl && !file.cloudPath).length };
+}
+
 function mergeImages(remoteImages = [], localImages = []) {
   const localById = new Map(localImages.map(image => [image.id, image]));
   const merged = remoteImages.map(image => ({ ...image, ...(localById.get(image.id)?.dataUrl ? { dataUrl: localById.get(image.id).dataUrl } : {}) }));
   localImages.filter(image => !image.cloudPath && !remoteImages.some(remote => remote.id === image.id)).forEach(image => merged.push(image));
+  return merged;
+}
+
+function mergeFiles(remoteFiles = [], localFiles = []) {
+  const localById = new Map(localFiles.map(file => [file.id, file]));
+  const merged = remoteFiles.map(file => ({ ...file, ...(localById.get(file.id)?.dataUrl ? { dataUrl: localById.get(file.id).dataUrl } : {}) }));
+  localFiles.filter(file => !file.cloudPath && !remoteFiles.some(remote => remote.id === file.id)).forEach(file => merged.push(file));
   return merged;
 }
 
@@ -821,18 +870,30 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   if (!snapshot || snapshot.schemaVersion !== 1 || !Array.isArray(snapshot.projects) || !Array.isArray(snapshot.tasks)) throw new Error("這不是可辨識的工作台 JSON 格式。");
   const projectImages = new Map(projects.map(item => [item.id, item.images]));
   const taskImages = new Map(tasks.map(item => [String(item.id), item.images]));
+  const packageMedia = new Map(packages.map(item => [item.id, { images: item.images, files: item.files }]));
+  const promptMedia = new Map(prompts.map(item => [item.id, { images: item.images, files: item.files }]));
   const nextProjects = structuredClone(snapshot.projects);
   const nextTasks = structuredClone(snapshot.tasks);
+  const nextPackages = structuredClone(snapshot.packages || []);
+  const nextPrompts = structuredClone(snapshot.prompts || []);
   nextProjects.forEach(item => { item.updated = formatProjectUpdated(item.updated); });
   if (preserveImages) {
     nextProjects.forEach(item => { item.images = mergeImages(item.images || [], projectImages.get(item.id) || []); });
     nextTasks.forEach(item => { item.images = mergeImages(item.images || [], taskImages.get(String(item.id)) || []); });
+    nextPackages.forEach(item => {
+      item.images = mergeImages(item.images || [], packageMedia.get(item.id)?.images || []);
+      item.files = mergeFiles(item.files || [], packageMedia.get(item.id)?.files || []);
+    });
+    nextPrompts.forEach(item => {
+      item.images = mergeImages(item.images || [], promptMedia.get(item.id)?.images || []);
+      item.files = mergeFiles(item.files || [], promptMedia.get(item.id)?.files || []);
+    });
   }
   replaceArray(projects, nextProjects);
   replaceArray(tasks, nextTasks);
   replaceArray(assets, structuredClone(snapshot.assets || []));
-  replaceArray(packages, structuredClone(snapshot.packages || []));
-  replaceArray(prompts, structuredClone(snapshot.prompts || []));
+  replaceArray(packages, nextPackages);
+  replaceArray(prompts, nextPrompts);
   replaceArray(siteCategories, structuredClone(snapshot.siteCategories || ["未分類"]));
   replaceRecord(projectContacts, structuredClone(snapshot.projectContacts || {}));
   replaceRecord(projectNotes, structuredClone(snapshot.projectNotes || {}));
@@ -940,6 +1001,13 @@ async function readGithubFile(path, token, allowMissing = false) {
   return githubJson(githubPathUrl(syncConfig.repo, path, syncConfig.branch), { headers: githubHeaders(token), allowMissing });
 }
 
+async function readGithubBinaryDataUrl(path, token, type = "application/octet-stream") {
+  const response = await fetch(githubPathUrl(syncConfig.repo, path, syncConfig.branch), { headers: { ...githubHeaders(token), Accept: "application/vnd.github.raw+json" } });
+  if (!response.ok) throw new Error(`GitHub 無法讀取附件（${response.status}）。`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return `data:${type};base64,${bytesToBase64(bytes)}`;
+}
+
 async function putGithubFile(path, content, token, sha = "", message = "Update Studio Ledger media") {
   const body = { message, content };
   if (!syncConfig.emptyRepository) body.branch = syncConfig.branch;
@@ -977,6 +1045,26 @@ async function uploadPendingImages(token) {
   return pending.length;
 }
 
+function fileExtension(file) {
+  const match = String(file.name || "").toLowerCase().match(/\.([a-z0-9]{1,12})$/);
+  return match ? match[1] : "bin";
+}
+
+async function uploadPendingFiles(token) {
+  const pending = allFileOwners().flatMap(owner => owner.files.filter(file => file.dataUrl && !file.cloudPath).map(file => ({ ...owner, file })));
+  for (let index = 0; index < pending.length; index += 1) {
+    const { kind, ownerId, file } = pending[index];
+    setSyncStatus("busy", `正在上傳文件 ${index + 1} / ${pending.length}`, file.name || "工作台附件");
+    const path = `media/${kind}/${encodeURIComponent(ownerId)}/files/${encodeURIComponent(file.id)}.${fileExtension(file)}`;
+    const existing = await readGithubFile(path, token, true);
+    const content = file.dataUrl.split(",")[1];
+    if (!content) throw new Error(`文件「${file.name}」缺少可上傳內容，請重新加入。`);
+    await putGithubFile(path, content, token, existing?.sha || "", `Upload Studio Ledger document: ${file.name || file.id}`);
+    file.cloudPath = path;
+  }
+  return pending.length;
+}
+
 async function removeQueuedImages(token) {
   const paths = [...pendingMediaDeletes];
   for (let index = 0; index < paths.length; index += 1) {
@@ -998,6 +1086,16 @@ async function hydrateCloudImages(token) {
     const remote = await readGithubFile(image.cloudPath, token);
     if (!remote.content) throw new Error(`GitHub 無法直接讀取圖片「${image.name}」，請確認檔案大小。`);
     image.dataUrl = `data:${image.type || "image/webp"};base64,${remote.content.replace(/\s/g, "")}`;
+  }
+  return missing.length;
+}
+
+async function hydrateCloudFiles(token) {
+  const missing = allFileOwners().flatMap(owner => owner.files.filter(file => file.cloudPath && !file.dataUrl));
+  for (let index = 0; index < missing.length; index += 1) {
+    const file = missing[index];
+    setSyncStatus("busy", `正在讀取文件 ${index + 1} / ${missing.length}`, file.name || "工作台附件");
+    file.dataUrl = await readGithubBinaryDataUrl(file.cloudPath, token, file.type || "application/octet-stream");
   }
   return missing.length;
 }
@@ -1037,11 +1135,12 @@ async function pullFromGithub() {
   await openPortableSnapshot(JSON.parse(decoded));
   reconcileMediaDeletes();
   const downloadedImages = await hydrateCloudImages(syncToken());
+  const downloadedFiles = await hydrateCloudFiles(syncToken());
   syncConfig.lastSha = remote.sha;
   syncConfig.lastSyncedAt = new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
   saveSyncConfig();
   persistLocalData();
-  setSyncStatus("ok", "下載完成", `這台裝置已套用 GitHub 最新資料${downloadedImages ? `，並讀取 ${downloadedImages} 張圖片` : ""}。`);
+  setSyncStatus("ok", "下載完成", `這台裝置已套用 GitHub 最新資料${downloadedImages ? `，並讀取 ${downloadedImages} 張圖片` : ""}${downloadedFiles ? `、${downloadedFiles} 個文件` : ""}。`);
 }
 
 async function pushToGithub() {
@@ -1049,6 +1148,7 @@ async function pushToGithub() {
   const remote = syncConfig.emptyRepository ? null : await readGithubState(token, true);
   if (remote && (!syncConfig.lastSha || remote.sha !== syncConfig.lastSha)) throw new Error("GitHub 上有這台裝置尚未下載的版本。請先下載確認，再上傳本機修改。");
   const uploadedImages = await uploadPendingImages(token);
+  const uploadedFiles = await uploadPendingFiles(token);
   const deletedImages = await removeQueuedImages(token);
   const snapshot = await portableSnapshot();
   const content = bytesToBase64(new TextEncoder().encode(JSON.stringify(snapshot, null, 2)));
@@ -1058,7 +1158,7 @@ async function pushToGithub() {
   syncConfig.lastSyncedAt = new Intl.DateTimeFormat("zh-TW", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
   saveSyncConfig();
   persistLocalData();
-  setSyncStatus("ok", "上傳完成", `目前資料已加密並寫入 Private Repository${uploadedImages ? `，新增 ${uploadedImages} 張圖片` : ""}${deletedImages ? `，清理 ${deletedImages} 張舊圖` : ""}。`);
+  setSyncStatus("ok", "上傳完成", `目前資料已加密並寫入 Private Repository${uploadedImages ? `，新增 ${uploadedImages} 張圖片` : ""}${uploadedFiles ? `、${uploadedFiles} 個文件` : ""}${deletedImages ? `，清理 ${deletedImages} 個舊媒體` : ""}。`);
 }
 
 async function exportPortableJson() {
@@ -1274,6 +1374,62 @@ async function pasteImagesFromClipboard(key) {
   }
 }
 
+function filePreviewItems(files = [], removable = true) {
+  return files.map(file => `<div class="file-upload-item"><button type="button" class="file-download" data-download-file="${escapeHtml(file.id)}"><span class="file-mark">${icon("download")}</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.type || "未知格式")} · ${formatFileSize(file.size)}${file.cloudPath ? " · 已同步" : " · 待同步"}</small></span></button>${removable ? `<button type="button" class="file-remove" data-file-remove="${escapeHtml(file.id)}" aria-label="移除 ${escapeHtml(file.name)}">${icon("close")}</button>` : ""}</div>`).join("");
+}
+
+function fileUploadField(key, files = [], label = "相關文件") {
+  fileDrafts.set(key, files.map(file => ({ ...file })));
+  return `<section class="file-upload-field" data-file-uploader data-upload-key="${escapeHtml(key)}">
+    <div class="image-upload-head"><div><strong>${label}</strong><span>規格、簡報、壓縮檔、程式碼或其他附件</span></div><span data-file-count>${files.length} / ${MAX_FORM_FILES}</span></div>
+    <div class="file-drop-zone" data-file-drop tabindex="0">
+      <span class="file-drop-icon">${icon("upload")}</span><div><strong>拖放文件到這裡</strong><span>接受任何檔案格式，單檔上限 15 MB</span></div>
+      <button type="button" class="outline-button" data-file-select>選擇文件</button>
+      <input data-file-input type="file" multiple hidden>
+    </div>
+    <div class="image-upload-status" data-file-status aria-live="polite">文件會在下次上傳目前資料時同步到 Private Repository。</div>
+    <div class="file-upload-list" data-file-preview ${files.length ? "" : "hidden"}>${filePreviewItems(files)}</div>
+  </section>`;
+}
+
+function renderFileUploader(key, message = "") {
+  const uploader = drawerBody.querySelector(`[data-file-uploader][data-upload-key="${CSS.escape(key)}"]`);
+  if (!uploader) return;
+  const files = fileDrafts.get(key) || [];
+  const preview = uploader.querySelector("[data-file-preview]");
+  preview.innerHTML = filePreviewItems(files);
+  preview.hidden = files.length === 0;
+  uploader.querySelector("[data-file-count]").textContent = `${files.length} / ${MAX_FORM_FILES}`;
+  if (message) uploader.querySelector("[data-file-status]").textContent = message;
+}
+
+async function addFilesToDraft(key, incomingFiles) {
+  const existing = fileDrafts.get(key) || [];
+  const candidates = [...incomingFiles].filter(file => file && file.name);
+  const available = Math.max(0, MAX_FORM_FILES - existing.length);
+  let remainingBytes = MAX_FORM_FILE_TOTAL_BYTES - existing.reduce((total, file) => total + file.size, 0);
+  const valid = [];
+  for (const file of candidates.slice(0, available)) {
+    if (file.size <= MAX_FORM_FILE_BYTES && file.size <= remainingBytes) {
+      valid.push(file);
+      remainingBytes -= file.size;
+    }
+  }
+  if (!valid.length) {
+    renderFileUploader(key, existing.length >= MAX_FORM_FILES ? "每筆資料最多可加入 8 個文件。" : "文件超過單檔 15 MB 或合計 40 MB，請縮小後再加入。");
+    return;
+  }
+  const added = await Promise.all(valid.map(async file => ({ id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: file.name, type: file.type || "application/octet-stream", size: file.size, dataUrl: await blobToDataUrl(file) })));
+  fileDrafts.set(key, [...existing, ...added]);
+  const skipped = candidates.length - added.length;
+  renderFileUploader(key, skipped ? `已加入 ${added.length} 個文件；另有 ${skipped} 個未通過限制。` : `已加入 ${added.length} 個文件，會在下次 GitHub 上傳時同步。`);
+}
+
+function detailMedia(images = [], files = [], label = "相關素材") {
+  if (!images.length && !files.length) return "";
+  return `<section class="detail-media"><div class="form-section-head"><strong>${label}</strong><span>${images.length} 張圖片 · ${files.length} 個文件</span></div>${images.length ? `<div class="detail-media-images">${images.map(image => image.dataUrl ? `<img src="${escapeHtml(image.dataUrl)}" alt="${escapeHtml(image.name)}">` : `<span class="cloud-image-loading">${icon("cloud")}<small>等待讀取</small></span>`).join("")}</div>` : ""}${files.length ? `<div class="file-upload-list">${filePreviewItems(files, false)}</div>` : ""}</section>`;
+}
+
 function connectionFormFields(values = {}) {
   return `<div class="form-section">
     <div class="form-section-head"><strong>環境與存取</strong><span>可稍後補填</span></div>
@@ -1375,6 +1531,7 @@ function categoryEditForm(category) {
 function packageForm(pkg = {}) {
   const selectedProjects = pkg.projectIds || (state.route.startsWith("project:") ? [currentProject().id] : []);
   const selectedState = pkg.state || "穩定使用中";
+  const uploadKey = `package-${pkg.id || "new"}`;
   return `<form class="form-stack" data-package-form data-package-id="${escapeHtml(pkg.id || "")}">
     <div class="form-grid"><div class="form-field"><label for="packageName">套件名稱</label><input id="packageName" name="name" required value="${escapeHtml(pkg.name || "")}" placeholder="例如：Swiper"></div><div class="form-field"><label for="packageCode">縮寫</label><input id="packageCode" name="code" maxlength="4" value="${escapeHtml(pkg.code || "")}" placeholder="SW"></div></div>
     <div class="form-field"><label for="packageNote">主要用途</label><input id="packageNote" name="note" required value="${escapeHtml(pkg.note || "")}" placeholder="例如：觸控輪播與內容滑動"></div>
@@ -1384,6 +1541,8 @@ function packageForm(pkg = {}) {
     <fieldset class="package-project-field"><legend>使用中的專案</legend><div>${projects.map(project => `<label><input type="checkbox" name="projectIds" value="${project.id}" ${selectedProjects.includes(project.id) ? "checked" : ""}><span>${escapeHtml(project.name)}</span></label>`).join("")}</div></fieldset>
     <div class="form-field"><label for="packageCompatibility">相容性與升級注意</label><textarea id="packageCompatibility" name="compatibility" placeholder="記錄瀏覽器限制、breaking changes 或搭配套件。">${escapeHtml(pkg.compatibility || "")}</textarea></div>
     <div class="form-field"><label for="packageSnippet">安裝／初始化片段</label><textarea id="packageSnippet" class="code-input" name="snippet" spellcheck="false" placeholder="貼上常用的引入或初始化程式碼。">${escapeHtml(pkg.snippet || "")}</textarea></div>
+    ${imageUploadField(uploadKey, pkg.images || [], "套件圖片")}
+    ${fileUploadField(uploadKey, pkg.files || [], "套件文件")}
     <button class="primary-button drawer-submit" type="submit">${pkg.id ? "儲存套件資料" : "加入套件庫"}</button>
   </form>`;
 }
@@ -1395,6 +1554,7 @@ function packageDetail(pkg) {
     <div class="package-current-version"><span>目前使用版本</span><strong>v${escapeHtml(pkg.version)}</strong><small>${pkg.latestVersion && pkg.latestVersion !== pkg.version ? `可測試 v${escapeHtml(pkg.latestVersion)}` : "目前為登記的最新版本"}</small></div>
     ${pkg.snippet ? `<div class="detail-code">${escapeHtml(pkg.snippet)}</div>` : ""}
     <dl class="package-detail-list"><div><dt>使用專案</dt><dd>${escapeHtml(pkg.projectIds.map(id => projects.find(project => project.id === id)?.name).filter(Boolean).join("、") || "尚未關聯")}</dd></div><div><dt>相容性</dt><dd>${escapeHtml(pkg.compatibility || "尚未記錄")}</dd></div>${sourceUrl ? `<div><dt>官方來源</dt><dd><button class="asset-url-copy" data-copy="${escapeHtml(sourceUrl)}">${icon("copy")}複製網址</button></dd></div>` : ""}</dl>
+    ${detailMedia(pkg.images || [], pkg.files || [], "套件素材與文件")}
     <div class="package-history"><div><strong>版本歷程</strong><small>${history.length} 筆</small></div>${history.length ? history.map(item => `<div class="package-history-row"><strong>v${escapeHtml(item.version)}</strong><span>${escapeHtml(item.note || "版本更新")}</span><small>${escapeHtml(item.date)}</small></div>`).join("") : `<p>目前還沒有舊版紀錄。</p>`}</div>
     ${sourceUrl ? `<button class="outline-button drawer-wide-action" data-open-url="${escapeHtml(sourceUrl)}">${icon("external")}開啟官方文件</button>` : ""}<button class="primary-button drawer-submit" data-package-edit="${pkg.id}">${icon("edit")}修改套件資料</button></div>`;
 }
@@ -1402,6 +1562,7 @@ function packageDetail(pkg) {
 function promptForm(prompt = {}) {
   const selectedProjects = prompt.projectIds || (state.route.startsWith("project:") ? [currentProject().id] : []);
   const selectedType = prompt.type || "圖片生成";
+  const uploadKey = `prompt-${prompt.id || "new"}`;
   return `<form class="form-stack" data-prompt-form data-prompt-id="${escapeHtml(prompt.id || "")}">
     <div class="form-grid"><div class="form-field"><label for="promptTitle">提示詞名稱</label><input id="promptTitle" name="title" required value="${escapeHtml(prompt.title || "")}" placeholder="例如：產品情境主視覺"></div><div class="form-field"><label for="promptType">用途分類</label><select id="promptType" name="type">${["圖片生成", "圖片編修", "短影片", "程式協助", "文案", "除錯分析"].map(type => `<option ${selectedType === type ? "selected" : ""}>${type}</option>`).join("")}</select></div></div>
     <div class="form-field"><label for="promptModel">使用模型／工具</label><input id="promptModel" name="model" required value="${escapeHtml(prompt.model || "")}" placeholder="例如：ImageGen、Runway、Codex"></div>
@@ -1410,6 +1571,8 @@ function promptForm(prompt = {}) {
     <fieldset class="package-project-field"><legend>關聯專案</legend><div>${projects.map(project => `<label><input type="checkbox" name="projectIds" value="${project.id}" ${selectedProjects.includes(project.id) ? "checked" : ""}><span>${escapeHtml(project.name)}</span></label>`).join("")}</div></fieldset>
     <div class="form-field"><label for="promptNote">使用筆記</label><textarea id="promptNote" name="note" placeholder="記下適用情境、容易失敗的條件或輸出規格。">${escapeHtml(prompt.note || "")}</textarea></div>
     <div class="form-field"><label for="promptOutput">成果或工具網址</label><input id="promptOutput" name="outputUrl" type="url" value="${escapeHtml(prompt.outputUrl || "")}" placeholder="https://..." inputmode="url" spellcheck="false"><small>可放生成成果、對話或模型工具網址。</small></div>
+    ${imageUploadField(uploadKey, prompt.images || [], "提示詞圖片")}
+    ${fileUploadField(uploadKey, prompt.files || [], "提示詞文件")}
     <button class="primary-button drawer-submit" type="submit">${prompt.id ? "儲存提示詞版本" : "加入提示詞庫"}</button>
   </form>`;
 }
@@ -1419,7 +1582,7 @@ function promptDetail(prompt) {
   const outputUrl = normalizeHttpUrl(prompt.outputUrl);
   const history = prompt.history || [];
   const projectNames = prompt.projectIds.map(id => projects.find(project => project.id === id)?.name).filter(Boolean);
-  return `<div class="prompt-detail"><div class="prompt-detail-head"><span class="prompt-type">${escapeHtml(prompt.type)}</span><span>v${version} · ${escapeHtml(prompt.updated)}</span></div><div class="prompt-detail-model"><span>使用模型／工具</span><strong>${escapeHtml(prompt.model)}</strong></div><div class="prompt-detail-body"><div><strong>提示詞全文</strong><button class="field-copy-button" data-copy-prompt="${prompt.id}">${icon("copy")}複製全文</button></div><pre>${escapeHtml(prompt.body)}</pre></div><div class="variables prompt-detail-variables">${prompt.variables.map(variable => `<span>{{${escapeHtml(variable)}}}</span>`).join("") || `<small>沒有設定變數</small>`}</div><dl class="package-detail-list"><div><dt>關聯專案</dt><dd>${escapeHtml(projectNames.join("、") || "尚未關聯")}</dd></div><div><dt>使用筆記</dt><dd>${escapeHtml(prompt.note || "尚未記錄")}</dd></div>${outputUrl ? `<div><dt>成果連結</dt><dd><button class="asset-url-copy" data-copy="${escapeHtml(outputUrl)}">${icon("copy")}複製網址</button></dd></div>` : ""}</dl><div class="prompt-history"><div><strong>版本紀錄</strong><small>${history.length} 個舊版本</small></div>${history.length ? history.map(item => `<details class="prompt-history-row"><summary><strong>v${escapeHtml(item.version)}</strong><span>${escapeHtml(item.note || "提示詞內容更新")}</span><small>${escapeHtml(item.date)}</small></summary><pre>${escapeHtml(item.body)}</pre><button class="outline-button" data-copy="${escapeHtml(item.body)}">${icon("copy")}複製這一版</button></details>`).join("") : `<p>目前還沒有舊版本；第一次修改全文後會自動建立。</p>`}</div>${outputUrl ? `<button class="outline-button drawer-wide-action" data-open-url="${escapeHtml(outputUrl)}">${icon("external")}開啟成果或工具</button>` : ""}<button class="primary-button drawer-submit" data-prompt-edit="${prompt.id}">${icon("edit")}修改提示詞</button></div>`;
+  return `<div class="prompt-detail"><div class="prompt-detail-head"><span class="prompt-type">${escapeHtml(prompt.type)}</span><span>v${version} · ${escapeHtml(prompt.updated)}</span></div><div class="prompt-detail-model"><span>使用模型／工具</span><strong>${escapeHtml(prompt.model)}</strong></div><div class="prompt-detail-body"><div><strong>提示詞全文</strong><button class="field-copy-button" data-copy-prompt="${prompt.id}">${icon("copy")}複製全文</button></div><pre>${escapeHtml(prompt.body)}</pre></div><div class="variables prompt-detail-variables">${prompt.variables.map(variable => `<span>{{${escapeHtml(variable)}}}</span>`).join("") || `<small>沒有設定變數</small>`}</div><dl class="package-detail-list"><div><dt>關聯專案</dt><dd>${escapeHtml(projectNames.join("、") || "尚未關聯")}</dd></div><div><dt>使用筆記</dt><dd>${escapeHtml(prompt.note || "尚未記錄")}</dd></div>${outputUrl ? `<div><dt>成果連結</dt><dd><button class="asset-url-copy" data-copy="${escapeHtml(outputUrl)}">${icon("copy")}複製網址</button></dd></div>` : ""}</dl>${detailMedia(prompt.images || [], prompt.files || [], "提示詞素材與文件")}<div class="prompt-history"><div><strong>版本紀錄</strong><small>${history.length} 個舊版本</small></div>${history.length ? history.map(item => `<details class="prompt-history-row"><summary><strong>v${escapeHtml(item.version)}</strong><span>${escapeHtml(item.note || "提示詞內容更新")}</span><small>${escapeHtml(item.date)}</small></summary><pre>${escapeHtml(item.body)}</pre><button class="outline-button" data-copy="${escapeHtml(item.body)}">${icon("copy")}複製這一版</button></details>`).join("") : `<p>目前還沒有舊版本；第一次修改全文後會自動建立。</p>`}</div>${outputUrl ? `<button class="outline-button drawer-wide-action" data-open-url="${escapeHtml(outputUrl)}">${icon("external")}開啟成果或工具</button>` : ""}<button class="primary-button drawer-submit" data-prompt-edit="${prompt.id}">${icon("edit")}修改提示詞</button></div>`;
 }
 
 function noteForm(note = {}) {
@@ -1551,6 +1714,20 @@ function executeCommand(index) {
 }
 
 document.addEventListener("click", async event => {
+  const fileDownload = event.target.closest("[data-download-file]");
+  if (fileDownload) {
+    const file = [...allFileOwners().flatMap(owner => owner.files), ...[...fileDrafts.values()].flat()].find(item => item.id === fileDownload.dataset.downloadFile);
+    if (!file) return;
+    try {
+      if (!file.dataUrl && file.cloudPath && syncToken()) file.dataUrl = await readGithubBinaryDataUrl(file.cloudPath, syncToken(), file.type);
+      if (!file.dataUrl) throw new Error("這個文件尚未同步，請先儲存並上傳目前資料。");
+      const link = document.createElement("a");
+      link.href = file.dataUrl;
+      link.download = file.name || "document";
+      link.click();
+    } catch (error) { showToast(error.message); }
+    return;
+  }
   const attachmentButton = event.target.closest("[data-download-attachment]");
   if (attachmentButton) {
     const attachmentId = attachmentButton.dataset.downloadAttachment;
@@ -1617,8 +1794,20 @@ document.addEventListener("click", async event => {
     renderImageUploader(key, "已移除圖片；儲存後才會更新這筆資料。");
     return;
   }
+  const fileSelect = event.target.closest("[data-file-select]");
+  if (fileSelect) { fileSelect.closest("[data-file-uploader]")?.querySelector("[data-file-input]")?.click(); return; }
+  const fileRemove = event.target.closest("[data-file-remove]");
+  if (fileRemove) {
+    const uploader = fileRemove.closest("[data-file-uploader]");
+    const key = uploader.dataset.uploadKey;
+    fileDrafts.set(key, (fileDrafts.get(key) || []).filter(file => file.id !== fileRemove.dataset.fileRemove));
+    renderFileUploader(key, "已移除文件；儲存後才會更新這筆資料。");
+    return;
+  }
   const imageDrop = event.target.closest("[data-image-drop]");
   if (imageDrop && !event.target.closest("button")) { imageDrop.querySelector("[data-image-file]")?.click(); return; }
+  const fileDrop = event.target.closest("[data-file-drop]");
+  if (fileDrop && !event.target.closest("button")) { fileDrop.querySelector("[data-file-input]")?.click(); return; }
   const route = event.target.closest("[data-route]")?.dataset.route;
   if (route) { navigate(route); return; }
   const project = event.target.closest("[data-project]")?.dataset.project;
@@ -1846,7 +2035,10 @@ document.addEventListener("click", async event => {
   if (packageDeleteButton) {
     if (packageDeleteButton.dataset.armed === "true") {
       const index = packages.findIndex(pkg => pkg.id === packageDeleteButton.dataset.packageDelete);
-      if (index >= 0) packages.splice(index, 1);
+      if (index >= 0) {
+        queueMediaDeletes([...(packages[index].images || []), ...(packages[index].files || [])]);
+        packages.splice(index, 1);
+      }
       render();
       showToast("已從原型移除套件");
     } else {
@@ -1870,7 +2062,10 @@ document.addEventListener("click", async event => {
   if (promptDeleteButton) {
     if (promptDeleteButton.dataset.armed === "true") {
       const index = prompts.findIndex(prompt => prompt.id === promptDeleteButton.dataset.promptDelete);
-      if (index >= 0) prompts.splice(index, 1);
+      if (index >= 0) {
+        queueMediaDeletes([...(prompts[index].images || []), ...(prompts[index].files || [])]);
+        prompts.splice(index, 1);
+      }
       render();
       showToast("已從原型移除提示詞");
     } else {
@@ -1978,7 +2173,10 @@ document.addEventListener("change", async event => {
         collectorResult = mergeCollectorSnapshot(source);
       } else {
         await openPortableSnapshot(source);
-        if (syncToken()) await hydrateCloudImages(syncToken());
+        if (syncToken()) {
+          await hydrateCloudImages(syncToken());
+          await hydrateCloudFiles(syncToken());
+        }
       }
       persistLocalData();
       render();
@@ -1992,6 +2190,12 @@ document.addEventListener("change", async event => {
   if (event.target.matches("[data-image-file]")) {
     const key = event.target.closest("[data-image-uploader]").dataset.uploadKey;
     await addImagesToDraft(key, event.target.files || []);
+    event.target.value = "";
+    return;
+  }
+  if (event.target.matches("[data-file-input]")) {
+    const key = event.target.closest("[data-file-uploader]").dataset.uploadKey;
+    await addFilesToDraft(key, event.target.files || []);
     event.target.value = "";
     return;
   }
@@ -2014,23 +2218,24 @@ document.addEventListener("paste", async event => {
 });
 
 document.addEventListener("dragover", event => {
-  const zone = event.target.closest("[data-image-drop]");
+  const zone = event.target.closest("[data-image-drop], [data-file-drop]");
   if (!zone) return;
   event.preventDefault();
   zone.classList.add("is-dragging");
 });
 
 document.addEventListener("dragleave", event => {
-  const zone = event.target.closest("[data-image-drop]");
+  const zone = event.target.closest("[data-image-drop], [data-file-drop]");
   if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove("is-dragging");
 });
 
 document.addEventListener("drop", async event => {
-  const zone = event.target.closest("[data-image-drop]");
+  const zone = event.target.closest("[data-image-drop], [data-file-drop]");
   if (!zone) return;
   event.preventDefault();
   zone.classList.remove("is-dragging");
-  await addImagesToDraft(zone.closest("[data-image-uploader]").dataset.uploadKey, event.dataTransfer?.files || []);
+  if (zone.matches("[data-file-drop]")) await addFilesToDraft(zone.closest("[data-file-uploader]").dataset.uploadKey, event.dataTransfer?.files || []);
+  else await addImagesToDraft(zone.closest("[data-image-uploader]").dataset.uploadKey, event.dataTransfer?.files || []);
 });
 
 document.addEventListener("error", event => {
@@ -2167,6 +2372,9 @@ document.addEventListener("submit", async event => {
       return;
     }
     const existing = prompts.find(prompt => prompt.id === promptEditor.dataset.promptId);
+    const uploadKey = promptEditor.querySelector("[data-image-uploader]")?.dataset.uploadKey;
+    const images = (imageDrafts.get(uploadKey) || []).map(image => ({ ...image }));
+    const files = (fileDrafts.get(uploadKey) || []).map(file => ({ ...file }));
     const history = existing?.history ? [...existing.history] : [];
     const body = values.body.trim();
     const bodyChanged = Boolean(existing && existing.body !== body);
@@ -2174,10 +2382,16 @@ document.addEventListener("submit", async event => {
       history.unshift({ version: history.length + 1, date: existing.updated || "先前版本", body: existing.body, note: "修改提示詞全文前" });
     }
     const variables = values.variables.split(",").map(variable => variable.trim().replace(/^\{\{|\}\}$/g, "")).filter(Boolean);
-    const record = { title: values.title.trim(), type: values.type, model: values.model.trim(), body, variables: [...new Set(variables)], projectIds: formData.getAll("projectIds"), note: values.note.trim(), outputUrl, updated: "今天", history };
-    if (existing) Object.assign(existing, record);
+    const record = { title: values.title.trim(), type: values.type, model: values.model.trim(), body, variables: [...new Set(variables)], projectIds: formData.getAll("projectIds"), note: values.note.trim(), outputUrl, updated: "今天", history, images, files };
+    if (existing) {
+      const retainedMedia = new Set([...images, ...files].map(item => item.id));
+      queueMediaDeletes([...(existing.images || []), ...(existing.files || [])].filter(item => !retainedMedia.has(item.id)));
+      Object.assign(existing, record);
+    }
     else prompts.unshift({ id: `prompt-${Date.now()}`, ...record });
     if (state.route.startsWith("project:")) state.projectTab = "AI 提示詞";
+    imageDrafts.delete(uploadKey);
+    fileDrafts.delete(uploadKey);
     closeDrawer();
     render();
     showToast(existing ? (bodyChanged ? "已更新並保留上一版提示詞" : "已更新提示詞資料") : "已加入提示詞庫（原型尚未保存）");
@@ -2197,6 +2411,9 @@ document.addEventListener("submit", async event => {
       return;
     }
     const existing = packages.find(pkg => pkg.id === packageEditor.dataset.packageId);
+    const uploadKey = packageEditor.querySelector("[data-image-uploader]")?.dataset.uploadKey;
+    const images = (imageDrafts.get(uploadKey) || []).map(image => ({ ...image }));
+    const files = (fileDrafts.get(uploadKey) || []).map(file => ({ ...file }));
     const history = existing?.history ? [...existing.history] : [];
     if (existing && existing.version !== values.version.trim()) {
       history.unshift({ version: existing.version, date: "今天", note: `更新至 ${values.version.trim()}` });
@@ -2213,10 +2430,18 @@ document.addEventListener("submit", async event => {
       projectIds: formData.getAll("projectIds"),
       compatibility: values.compatibility.trim(),
       snippet: values.snippet.trim(),
-      history
+      history,
+      images,
+      files
     };
-    if (existing) Object.assign(existing, record);
+    if (existing) {
+      const retainedMedia = new Set([...images, ...files].map(item => item.id));
+      queueMediaDeletes([...(existing.images || []), ...(existing.files || [])].filter(item => !retainedMedia.has(item.id)));
+      Object.assign(existing, record);
+    }
     else packages.unshift({ id: `pkg-${Date.now()}`, ...record });
+    imageDrafts.delete(uploadKey);
+    fileDrafts.delete(uploadKey);
     closeDrawer();
     render();
     showToast(existing ? "已更新套件與版本紀錄" : "已加入套件庫（原型尚未保存）");
@@ -2452,12 +2677,12 @@ function closeMobileMenu() {
 
 restoreLocalData();
 render();
-if (syncConfig.repo && syncToken() && imageSyncCounts().cloud) {
-  hydrateCloudImages(syncToken()).then(count => {
-    if (count) {
+if (syncConfig.repo && syncToken() && (imageSyncCounts().cloud || fileSyncCounts().cloud)) {
+  Promise.all([hydrateCloudImages(syncToken()), hydrateCloudFiles(syncToken())]).then(([imageCount, fileCount]) => {
+    if (imageCount || fileCount) {
       persistLocalData();
-      setSyncStatus("ok", "雲端圖片已就緒", `已安全讀取 ${count} 張圖片。`);
+      setSyncStatus("ok", "雲端媒體已就緒", `已安全讀取 ${imageCount} 張圖片、${fileCount} 個文件。`);
       render();
     }
-  }).catch(error => setSyncStatus("error", "雲端圖片讀取未完成", error.message));
+  }).catch(error => setSyncStatus("error", "雲端媒體讀取未完成", error.message));
 }
