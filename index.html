@@ -8,6 +8,9 @@
   <meta property="og:image" content="/.impeccable/review/desktop.png">
   <meta property="og:title" content="前端工作台 — Studio Ledger">
   <title>前端工作台 — Studio Ledger</title>
+  <!-- Firefox「將分頁新增到工具列」依 manifest 的 start_url 開啟；缺少時會開到 github.io 根目錄造成 404 -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css?v=20260915-library-categories">
 </head>
 <body>
@@ -120,6 +123,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=20260915-sync-conflict"></script>
+  <script src="app.js?v=20260915-web-app-cache"></script>
 </body>
 </html>

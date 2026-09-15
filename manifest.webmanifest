@@ -1,0 +1,13 @@
+{
+  "name": "前端工作台 — Studio Ledger",
+  "short_name": "前端工作台",
+  "lang": "zh-Hant",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#171816",
+  "theme_color": "#171816",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

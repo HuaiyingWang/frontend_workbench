@@ -114,6 +114,7 @@ const WORKBENCH_CACHE_KEY = "studio-ledger-data-v1";
 const SYNC_CONFIG_KEY = "studio-ledger-github-config-v1";
 const SYNC_TOKEN_KEY = "studio-ledger-github-token-v1";
 const MEDIA_DELETE_KEY = "studio-ledger-media-deletes-v1";
+const SYNC_PASSPHRASE_KEY = "studio-ledger-passphrase-v1";
 let syncPassphrase = "";
 let syncBusy = false;
 let syncStatus = { tone: "idle", title: "尚未連線", detail: "設定 Private Repository 後即可跨裝置同步。" };
@@ -139,6 +140,7 @@ const syncConfig = {
   ...readJsonStorage(localStorage, SYNC_CONFIG_KEY, {})
 };
 const pendingMediaDeletes = new Set(readJsonStorage(localStorage, MEDIA_DELETE_KEY, []));
+syncPassphrase = localStorage.getItem(SYNC_PASSPHRASE_KEY) || ""; // 只有勾選「記住這台裝置」時才會保存
 
 function syncToken() {
   return sessionStorage.getItem(SYNC_TOKEN_KEY) || localStorage.getItem(SYNC_TOKEN_KEY) || "";
@@ -268,8 +270,8 @@ function renderSettings() {
           </div>
           <div class="form-field"><label for="syncPath">JSON 儲存路徑</label><input id="syncPath" name="path" required value="${escapeHtml(syncConfig.path)}" placeholder="data/state.json" autocomplete="off" spellcheck="false"></div>
           <div class="form-field"><label for="syncToken">Fine-grained Token</label><div class="secret-input"><input id="syncToken" name="token" type="password" required value="${escapeHtml(syncToken())}" placeholder="github_pat_..." autocomplete="off" spellcheck="false"><button type="button" data-toggle-secret="syncToken" aria-label="顯示或隱藏 Token">顯示</button></div><small>只授權這個 Repository 的 Contents：Read and write。請勿貼到聊天或寫進程式碼。</small></div>
-          <label class="sync-choice"><input name="rememberToken" type="checkbox" ${syncConfig.rememberToken ? "checked" : ""}><span><strong>記住這台裝置</strong><small>私人電腦可勾選；公共或共用裝置請保持關閉，關閉分頁後即失效。</small></span></label>
-          <div class="form-field"><label for="syncPassphrase">工作台解密密碼</label><div class="secret-input"><input id="syncPassphrase" name="passphrase" type="password" required value="${escapeHtml(syncPassphrase)}" minlength="10" placeholder="至少 10 個字元" autocomplete="new-password"><button type="button" data-toggle-secret="syncPassphrase" aria-label="顯示或隱藏解密密碼">顯示</button></div><small>不會保存或傳送到 GitHub。換裝置時需輸入同一組密碼；忘記後無法還原敏感資料。</small></div>
+          <label class="sync-choice"><input name="rememberToken" type="checkbox" ${syncConfig.rememberToken ? "checked" : ""}><span><strong>記住這台裝置</strong><small>私人電腦可勾選：這個瀏覽器會記住 Token 與解密密碼，開啟時自動同步。公共或共用裝置請保持關閉，關閉分頁後即失效。</small></span></label>
+          <div class="form-field"><label for="syncPassphrase">工作台解密密碼</label><div class="secret-input"><input id="syncPassphrase" name="passphrase" type="password" required value="${escapeHtml(syncPassphrase)}" minlength="10" placeholder="至少 10 個字元" autocomplete="new-password"><button type="button" data-toggle-secret="syncPassphrase" aria-label="顯示或隱藏解密密碼">顯示</button></div><small>不會傳送到 GitHub；只有勾選「記住這台裝置」時才保存在這個瀏覽器。換裝置時需輸入同一組密碼；忘記後無法還原敏感資料。</small></div>
           <div class="sync-form-actions"><button class="primary-button sync-connect" aria-label="${connected ? "重新測試 GitHub 連線" : "儲存並測試 GitHub 連線"}" ${syncBusy ? "disabled" : ""}>${icon("cloud")}<span>${connected ? "重新測試連線" : "儲存並測試連線"}</span></button>${connected ? `<button type="button" class="text-button" data-sync-disconnect>清除此裝置的連線</button>` : ""}</div>
         </form>
         <div class="sync-actions" aria-label="同步操作">
@@ -947,6 +949,23 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   replaceRecord(projectConnections, structuredClone(snapshot.projectConnections || {}));
 }
 
+// 本機暫存改用 IndexedDB：github.io 同帳號的所有 Pages 共用一個 origin，localStorage 約 5MB 會不夠用
+const cacheDb = new Promise((resolve, reject) => {
+  const request = indexedDB.open("studio-ledger", 1);
+  request.onupgradeneeded = () => request.result.createObjectStore("cache");
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
+
+async function cacheRequest(mode, action) {
+  const store = (await cacheDb).transaction("cache", mode).objectStore("cache");
+  return new Promise((resolve, reject) => {
+    const request = action(store);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 function persistLocalData() {
   try {
     const cached = withoutDeviceImages(plainDataSnapshot());
@@ -956,14 +975,17 @@ function persistLocalData() {
     cached.syncedSha = syncConfig.lastSha;
     cached.syncedHash = syncConfig.syncedHash || "";
     cached.remoteHash = syncConfig.remoteHash || "";
-    localStorage.setItem(WORKBENCH_CACHE_KEY, JSON.stringify(cached));
+    cacheRequest("readwrite", store => store.put(cached, WORKBENCH_CACHE_KEY)).catch(() => { /* local cache is best effort */ });
   } catch { /* local cache is best effort */ }
 }
 
-function restoreLocalData() {
-  const cached = readJsonStorage(localStorage, WORKBENCH_CACHE_KEY, null);
+async function restoreLocalData() {
+  let cached = null;
+  try { cached = await cacheRequest("readonly", store => store.get(WORKBENCH_CACHE_KEY)); } catch { /* IndexedDB 不可用時改讀舊版暫存 */ }
+  cached = cached || readJsonStorage(localStorage, WORKBENCH_CACHE_KEY, null);
+  localStorage.removeItem(WORKBENCH_CACHE_KEY); // 舊版暫存已搬到 IndexedDB，釋放同網域共用的 localStorage 空間
   if (!cached) return;
-  try { applyDataSnapshot(cached, false); } catch { localStorage.removeItem(WORKBENCH_CACHE_KEY); return; }
+  try { applyDataSnapshot(cached, false); } catch { cacheRequest("readwrite", store => store.delete(WORKBENCH_CACHE_KEY)).catch(() => {}); return; }
   connectionsEnvelope = cached.sensitiveConnections || null;
   if ("syncedSha" in cached) Object.assign(syncConfig, { lastSha: cached.syncedSha, syncedHash: cached.syncedHash, remoteHash: cached.remoteHash });
 }
@@ -1243,6 +1265,8 @@ async function testGithubConnection(form) {
   localStorage.removeItem(SYNC_TOKEN_KEY);
   sessionStorage.removeItem(SYNC_TOKEN_KEY);
   (syncConfig.rememberToken ? localStorage : sessionStorage).setItem(SYNC_TOKEN_KEY, values.token.trim());
+  localStorage.removeItem(SYNC_PASSPHRASE_KEY);
+  if (syncConfig.rememberToken) localStorage.setItem(SYNC_PASSPHRASE_KEY, values.passphrase);
   saveSyncConfig();
   const remote = syncConfig.emptyRepository ? null : await readGithubState(values.token.trim(), true);
   const branchNote = detectedBranch !== values.branch.trim() ? `已自動切換到預設分支 ${detectedBranch}。` : `目前分支為 ${detectedBranch}。`;
@@ -1331,6 +1355,15 @@ async function autoPullFromGithub(force = false) {
   } finally {
     syncBusy = false;
   }
+}
+
+// 已記住解密密碼時，開啟頁面直接解開暫存中的連線資訊，不必重新下載
+async function unlockCachedConnections() {
+  if (!connectionsEnvelope || connectionsUnlocked || !syncPassphrase) return;
+  try {
+    replaceRecord(projectConnections, { ...(await decryptConnections(connectionsEnvelope, syncPassphrase)), ...projectConnections });
+    connectionsUnlocked = true;
+  } catch { /* 密碼不符時維持鎖定，手動下載時會顯示錯誤 */ }
 }
 
 async function exportPortableJson() {
@@ -1983,6 +2016,7 @@ document.addEventListener("click", async event => {
   if (event.target.closest("[data-sync-disconnect]")) {
     localStorage.removeItem(SYNC_TOKEN_KEY);
     sessionStorage.removeItem(SYNC_TOKEN_KEY);
+    localStorage.removeItem(SYNC_PASSPHRASE_KEY);
     syncPassphrase = "";
     syncConfig.rememberToken = false;
     syncConfig.lastSha = "";
@@ -3014,9 +3048,10 @@ function closeMobileMenu() {
   if (!drawer.classList.contains("is-open")) scrim.hidden = true;
 }
 
-restoreLocalData();
-render();
-autoPullFromGithub(true).then(() => {
+restoreLocalData().then(async () => {
+  await unlockCachedConnections();
+  render();
+  await autoPullFromGithub(true);
   if (!syncConfig.repo || !syncToken() || !(imageSyncCounts().cloud || fileSyncCounts().cloud)) return;
   Promise.all([hydrateCloudImages(syncToken()), hydrateCloudFiles(syncToken())]).then(([imageCount, fileCount]) => {
     if (imageCount || fileCount) {
