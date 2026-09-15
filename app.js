@@ -621,7 +621,7 @@ function assetPreview(asset, detail = false) {
 function assetCard(asset) {
   const title = assetTitle(asset);
   return `<article class="asset-card" data-category="${escapeHtml(asset.category)}" data-search="${escapeHtml(`${title} ${asset.pageUrl || ""} ${asset.category} ${assetProjectName(asset)} ${asset.usage} ${asset.tags || ""}`)}">
-    <button class="asset-open" data-asset-open="${asset.id}" aria-label="查看 ${escapeHtml(title)}">${assetPreview(asset)}<span class="asset-info"><strong>${escapeHtml(title)}</strong><span><em>${escapeHtml(assetDomain(asset))}</em><em>${escapeHtml(asset.category)}</em></span><small>${escapeHtml(asset.usage || "尚未記錄參考重點")}</small></span></button>
+    <button class="asset-open" data-asset-open="${asset.id}" aria-label="查看 ${escapeHtml(title)}">${assetPreview(asset)}<div class="asset-info"><strong>${escapeHtml(title)}</strong><span><em>${escapeHtml(assetDomain(asset))}</em><em>${escapeHtml(asset.category)}</em></span><small>${escapeHtml(asset.usage || "尚未記錄參考重點")}</small></div></button>
     <div class="asset-actions"><button data-copy="${escapeHtml(asset.pageUrl || "")}" aria-label="複製 ${escapeHtml(title)} 網址">${icon("copy")}複製網址</button><button data-open-url="${escapeHtml(asset.pageUrl || "")}">開啟</button><button data-asset-edit="${asset.id}">修改</button><button class="asset-delete" data-asset-delete="${asset.id}">刪除</button></div>
   </article>`;
 }
