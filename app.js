@@ -997,6 +997,17 @@ async function readGithubState(token, allowMissing = false) {
   return githubJson(githubPathUrl(syncConfig.repo, syncConfig.path, syncConfig.branch), { headers: githubHeaders(token), allowMissing });
 }
 
+async function readGithubStateText(remote, token) {
+  if (remote?.content && remote.encoding === "base64") {
+    return new TextDecoder().decode(base64ToBytes(remote.content));
+  }
+  const response = await fetch(githubPathUrl(syncConfig.repo, syncConfig.path, syncConfig.branch), {
+    headers: { ...githubHeaders(token), Accept: "application/vnd.github.raw+json" }
+  });
+  if (!response.ok) throw new Error(`GitHub 無法讀取工作台資料（${response.status}）。`);
+  return response.text();
+}
+
 async function readGithubFile(path, token, allowMissing = false) {
   return githubJson(githubPathUrl(syncConfig.repo, path, syncConfig.branch), { headers: githubHeaders(token), allowMissing });
 }
@@ -1130,9 +1141,14 @@ async function testGithubConnection(form) {
 }
 
 async function pullFromGithub() {
-  const remote = await readGithubState(syncToken());
-  const decoded = new TextDecoder().decode(base64ToBytes(remote.content));
-  await openPortableSnapshot(JSON.parse(decoded));
+  const token = syncToken();
+  const remote = await readGithubState(token);
+  const decoded = await readGithubStateText(remote, token);
+  if (!decoded.trim()) throw new Error("雲端資料檔是空的，請回到原裝置重新「上傳目前資料」。");
+  let snapshot;
+  try { snapshot = JSON.parse(decoded); }
+  catch { throw new Error("雲端資料不是完整的 JSON，請回到原裝置重新上傳後再下載。"); }
+  await openPortableSnapshot(snapshot);
   reconcileMediaDeletes();
   const downloadedImages = await hydrateCloudImages(syncToken());
   const downloadedFiles = await hydrateCloudFiles(syncToken());
