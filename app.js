@@ -36,6 +36,10 @@ const assets = [
 ];
 
 const siteCategories = ["企業官網", "活動頁", "電商", "作品集", "互動靈感", "未分類"];
+const DEFAULT_PACKAGE_CATEGORIES = ["穩定使用中", "有新版待測", "相容限定", "未分類"];
+const DEFAULT_PROMPT_CATEGORIES = ["圖片生成", "圖片編修", "短影片", "程式協助", "文案", "除錯分析", "未分類"];
+const packageCategories = [...DEFAULT_PACKAGE_CATEGORIES];
+const promptCategories = [...DEFAULT_PROMPT_CATEGORIES];
 
 const tasks = [
   { id: 1, title: "手機版導覽列在 390px 時重疊", projectId: "aurora", project: "Aurora 秋季形象網站", dueDate: "2026-09-14", priority: "high", column: "收件匣", note: "iPhone 13 mini 與 390px 模擬尺寸都會發生。", age: "38 分鐘前", done: false },
@@ -627,15 +631,15 @@ function assetCard(asset) {
 }
 
 function renderAssets() {
-  return `<div class="page asset-page">${pageHead("網站素材庫", "收藏值得參考的網站，保留預覽、分類、網址與可套用的設計想法。", `<div class="page-action-group"><button class="outline-button" data-action="manage-categories">管理分類</button><button class="primary-button" data-action="upload" aria-label="收藏網站">${icon("plus")}<span>收藏網站</span></button></div>`)}
+  return `<div class="page asset-page library-page">${pageHead("網站素材庫", "收藏值得參考的網站，保留預覽、分類、網址與可套用的設計想法。", `<div class="page-action-group"><button class="outline-button" data-action="manage-categories">管理分類</button><button class="primary-button" data-action="upload" aria-label="收藏網站">${icon("plus")}<span>收藏網站</span></button></div>`)}
     <div class="toolbar asset-toolbar library-toolbar"><div class="toolbar-group">${["全部", ...siteCategories].map((x, i) => `<button class="filter-chip ${i === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋標題、網域、標籤或用途" aria-label="搜尋網站收藏"></div>
     <section class="asset-grid" data-filter-list>${assets.map(assetCard).join("")}<div class="empty-state in-grid" data-filter-empty hidden><h2>找不到網站</h2><p>換個分類或關鍵字，或收藏新的參考網站。</p></div></section>
   </div>`;
 }
 
 function renderPackages() {
-  return `<div class="page">${pageHead("套件庫", "記住哪些版本真正可靠、在哪些專案使用，以及升級前必須檢查什麼。", `<button class="primary-button" data-action="new-package">${icon("plus")}<span>登記套件</span></button>`)}
-    <div class="toolbar library-toolbar"><div class="toolbar-group">${["全部", "穩定使用中", "有新版待測", "相容限定"].map((x,i)=>`<button class="filter-chip ${i===0?"is-active":""}" data-library-filter="${x}">${x.replace("中","").replace("有新版待測","待測新版")}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋套件" aria-label="搜尋套件"></div>
+  return `<div class="page library-page">${pageHead("套件庫", "記住哪些版本真正可靠、在哪些專案使用，以及升級前必須檢查什麼。", `<div class="page-action-group"><button class="outline-button" data-action="manage-package-categories">管理分類</button><button class="primary-button" data-action="new-package">${icon("plus")}<span>登記套件</span></button></div>`)}
+    <div class="toolbar library-toolbar"><div class="toolbar-group">${["全部", ...packageCategories].map((x,i)=>`<button class="filter-chip ${i===0?"is-active":""}" data-library-filter="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋套件" aria-label="搜尋套件"></div>
     <section class="package-list" data-filter-list>${packages.map(packageRow).join("")}<div class="empty-state" data-filter-empty hidden><h2>找不到套件</h2><p>換個關鍵字或狀態篩選。</p></div></section>
   </div>`;
 }
@@ -669,9 +673,9 @@ function promptCard(prompt) {
 }
 
 function renderPrompts() {
-  const types = ["全部", ...new Set(prompts.map(prompt => prompt.type))];
-  return `<div class="page">${pageHead("提示詞庫", "把有效提示詞當成設計資產：快速複製、關聯專案，修改時保留可回查的舊版本。", `<button class="primary-button" data-action="new-prompt">${icon("plus")}<span>新增提示詞</span></button>`)}
-    <div class="toolbar library-toolbar"><div class="toolbar-group">${types.map((type, index) => `<button class="filter-chip ${index === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(type)}">${escapeHtml(type)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋名稱、模型、變數或內容" aria-label="搜尋提示詞"></div>
+  const types = ["全部", ...promptCategories];
+  return `<div class="page library-page">${pageHead("提示詞庫", "把有效提示詞當成設計資產：快速複製、關聯專案，修改時保留可回查的舊版本。", `<div class="page-action-group"><button class="outline-button" data-action="manage-prompt-categories">管理分類</button><button class="primary-button" data-action="new-prompt">${icon("plus")}<span>新增提示詞</span></button></div>`)}
+    <div class="toolbar library-toolbar"><div class="toolbar-group">${types.map((type, index) => `<button class="filter-chip ${index === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(type)}">${escapeHtml(type)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋提示詞" aria-label="搜尋提示詞"></div>
     <section class="prompt-grid" data-filter-list>${prompts.map(promptCard).join("")}<div class="empty-state in-grid" data-filter-empty ${prompts.length ? "hidden" : ""}><h2>${prompts.length ? "找不到提示詞" : "還沒有提示詞"}</h2><p>${prompts.length ? "換個關鍵字或類型。" : "新增第一組可重複使用的提示詞。"}</p></div></section>
   </div>`;
 }
@@ -714,6 +718,8 @@ function plainDataSnapshot() {
     packages: structuredClone(packages),
     prompts: structuredClone(prompts),
     siteCategories: structuredClone(siteCategories),
+    packageCategories: structuredClone(packageCategories),
+    promptCategories: structuredClone(promptCategories),
     projectContacts: structuredClone(projectContacts),
     projectNotes: structuredClone(projectNotes),
     projectChecklists: structuredClone(projectChecklists),
@@ -927,6 +933,8 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   replaceArray(packages, nextPackages);
   replaceArray(prompts, nextPrompts);
   replaceArray(siteCategories, structuredClone(snapshot.siteCategories || ["未分類"]));
+  replaceArray(packageCategories, [...new Set([...(snapshot.packageCategories || DEFAULT_PACKAGE_CATEGORIES), ...nextPackages.map(pkg => pkg.state).filter(Boolean), "未分類"])]);
+  replaceArray(promptCategories, [...new Set([...(snapshot.promptCategories || DEFAULT_PROMPT_CATEGORIES), ...nextPrompts.map(prompt => prompt.type).filter(Boolean), "未分類"])]);
   replaceRecord(projectContacts, structuredClone(snapshot.projectContacts || {}));
   replaceRecord(projectNotes, structuredClone(snapshot.projectNotes || {}));
   replaceRecord(projectChecklists, structuredClone(snapshot.projectChecklists || {}));
@@ -1596,6 +1604,33 @@ function categoryEditForm(category) {
   return `<form class="form-stack" data-category-form data-old-category="${escapeHtml(category)}"><div class="category-edit-summary"><strong>${escapeHtml(category)}</strong><span>${count} 個網站會同步更新分類名稱</span></div><div class="form-field"><label for="categoryName">分類名稱</label><input id="categoryName" name="categoryName" required maxlength="18" value="${escapeHtml(category)}"><small class="category-form-error" aria-live="polite"></small></div><button class="primary-button drawer-submit" type="submit">儲存分類名稱</button><button class="outline-button drawer-wide-action" type="button" data-action="manage-categories">返回分類列表</button></form>`;
 }
 
+function libraryCategoryConfig(kind) {
+  return kind === "package"
+    ? { categories: packageCategories, records: packages, field: "state", title: "套件分類", unit: "個套件", placeholder: "例如：動畫與互動", manageAction: "manage-package-categories" }
+    : { categories: promptCategories, records: prompts, field: "type", title: "提示詞分類", unit: "組提示詞", placeholder: "例如：網站企劃", manageAction: "manage-prompt-categories" };
+}
+
+function libraryCategoryManager(kind) {
+  const config = libraryCategoryConfig(kind);
+  return `<div class="category-manager">
+    <form class="category-create" data-library-category-form data-category-kind="${kind}">
+      <div class="form-field"><label for="libraryCategoryName">新增分類</label><div class="category-create-row"><input id="libraryCategoryName" name="categoryName" required maxlength="18" placeholder="${config.placeholder}"><button class="primary-button" type="submit">新增</button></div><small class="category-form-error" aria-live="polite"></small></div>
+    </form>
+    <div class="category-list" aria-label="${config.title}列表">${config.categories.map(category => {
+      const count = config.records.filter(record => record[config.field] === category).length;
+      const locked = category === "未分類";
+      return `<div class="category-row"><span><strong>${escapeHtml(category)}</strong><small>${count} ${config.unit}${locked ? " · 系統分類" : ""}</small></span><div><button class="outline-button" data-library-category-edit="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-library-category-delete="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
+    }).join("")}</div>
+    <p class="category-footnote">刪除使用中的分類時，原有資料會移到「未分類」。</p>
+  </div>`;
+}
+
+function libraryCategoryEditForm(kind, category) {
+  const config = libraryCategoryConfig(kind);
+  const count = config.records.filter(record => record[config.field] === category).length;
+  return `<form class="form-stack" data-library-category-form data-category-kind="${kind}" data-old-category="${escapeHtml(category)}"><div class="category-edit-summary"><strong>${escapeHtml(category)}</strong><span>${count} ${config.unit}會同步更新分類名稱</span></div><div class="form-field"><label for="libraryCategoryName">分類名稱</label><input id="libraryCategoryName" name="categoryName" required maxlength="18" value="${escapeHtml(category)}"><small class="category-form-error" aria-live="polite"></small></div><button class="primary-button drawer-submit" type="submit">儲存分類名稱</button><button class="outline-button drawer-wide-action" type="button" data-action="${config.manageAction}">返回分類列表</button></form>`;
+}
+
 function focusProjectForm() {
   const manual = projects.find(project => project.isFocus);
   const automatic = automaticFocusProject();
@@ -1615,7 +1650,7 @@ function packageForm(pkg = {}) {
     <div class="form-grid"><div class="form-field"><label for="packageName">套件名稱</label><input id="packageName" name="name" required value="${escapeHtml(pkg.name || "")}" placeholder="例如：Swiper"></div><div class="form-field"><label for="packageCode">縮寫</label><input id="packageCode" name="code" maxlength="4" value="${escapeHtml(pkg.code || "")}" placeholder="SW"></div></div>
     <div class="form-field"><label for="packageNote">主要用途</label><input id="packageNote" name="note" required value="${escapeHtml(pkg.note || "")}" placeholder="例如：觸控輪播與內容滑動"></div>
     <div class="form-grid"><div class="form-field"><label for="packageVersion">目前使用版本</label><input id="packageVersion" name="version" required value="${escapeHtml(pkg.version || "")}" placeholder="11.2.10" spellcheck="false"></div><div class="form-field"><label for="packageLatest">可用最新版本</label><input id="packageLatest" name="latestVersion" value="${escapeHtml(pkg.latestVersion || pkg.version || "")}" placeholder="12.0.2" spellcheck="false"></div></div>
-    <div class="form-field"><label for="packageState">使用狀態</label><select id="packageState" name="state">${["穩定使用中", "有新版待測", "相容限定"].map(item => `<option ${selectedState === item ? "selected" : ""}>${item}</option>`).join("")}</select></div>
+    <div class="form-field"><label for="packageState">套件分類</label><select id="packageState" name="state">${packageCategories.map(item => `<option ${selectedState === item ? "selected" : ""}>${escapeHtml(item)}</option>`).join("")}</select></div>
     <div class="form-field"><label for="packageSource">官方文件／來源網址</label><input id="packageSource" name="sourceUrl" type="url" value="${escapeHtml(pkg.sourceUrl || "")}" placeholder="https://example.com/docs" inputmode="url" spellcheck="false"></div>
     <fieldset class="package-project-field"><legend>使用中的專案</legend><div>${projects.map(project => `<label><input type="checkbox" name="projectIds" value="${project.id}" ${selectedProjects.includes(project.id) ? "checked" : ""}><span>${escapeHtml(project.name)}</span></label>`).join("")}</div></fieldset>
     <div class="form-field"><label for="packageCompatibility">相容性與升級注意</label><textarea id="packageCompatibility" name="compatibility" placeholder="記錄瀏覽器限制、breaking changes 或搭配套件。">${escapeHtml(pkg.compatibility || "")}</textarea></div>
@@ -1643,7 +1678,7 @@ function promptForm(prompt = {}) {
   const selectedType = prompt.type || "圖片生成";
   const uploadKey = `prompt-${prompt.id || "new"}`;
   return `<form class="form-stack" data-prompt-form data-prompt-id="${escapeHtml(prompt.id || "")}">
-    <div class="form-grid"><div class="form-field"><label for="promptTitle">提示詞名稱</label><input id="promptTitle" name="title" required value="${escapeHtml(prompt.title || "")}" placeholder="例如：產品情境主視覺"></div><div class="form-field"><label for="promptType">用途分類</label><select id="promptType" name="type">${["圖片生成", "圖片編修", "短影片", "程式協助", "文案", "除錯分析"].map(type => `<option ${selectedType === type ? "selected" : ""}>${type}</option>`).join("")}</select></div></div>
+    <div class="form-grid"><div class="form-field"><label for="promptTitle">提示詞名稱</label><input id="promptTitle" name="title" required value="${escapeHtml(prompt.title || "")}" placeholder="例如：產品情境主視覺"></div><div class="form-field"><label for="promptType">用途分類</label><select id="promptType" name="type">${promptCategories.map(type => `<option ${selectedType === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}</select></div></div>
     <div class="form-field"><label for="promptModel">使用模型／工具</label><input id="promptModel" name="model" required value="${escapeHtml(prompt.model || "")}" placeholder="例如：ImageGen、Runway、Codex"></div>
     <div class="form-field"><label for="promptBody">提示詞全文</label><textarea id="promptBody" class="prompt-body-input" name="body" required spellcheck="false" placeholder="貼上完整提示詞；可用 {{variable}} 標記替換內容。">${escapeHtml(prompt.body || "")}</textarea><small>修改全文時會自動保留上一版，不會覆蓋唯一紀錄。</small></div>
     <div class="form-field"><label for="promptVariables">可替換變數</label><input id="promptVariables" name="variables" value="${escapeHtml((prompt.variables || []).join(", "))}" placeholder="product, environment, brand_color"><small>用半形逗號分隔；卡片會顯示為 {{variable}}。</small></div>
@@ -1697,6 +1732,10 @@ function drawerContent(type, payload) {
   if (type === "upload") return { context: state.route.startsWith("project:") ? currentProject().name : "網站素材庫", title: "收藏網站", body: assetForm() };
   if (type === "manage-categories") return { context: "網站素材庫", title: "管理分類", body: categoryManager() };
   if (type === "edit-category") return { context: "管理分類", title: "修改分類", body: categoryEditForm(payload.category || "") };
+  if (type === "manage-package-categories") return { context: "套件庫", title: "管理分類", body: libraryCategoryManager("package") };
+  if (type === "edit-package-category") return { context: "套件庫 · 管理分類", title: "修改分類", body: libraryCategoryEditForm("package", payload.category || "") };
+  if (type === "manage-prompt-categories") return { context: "提示詞庫", title: "管理分類", body: libraryCategoryManager("prompt") };
+  if (type === "edit-prompt-category") return { context: "提示詞庫 · 管理分類", title: "修改分類", body: libraryCategoryEditForm("prompt", payload.category || "") };
   if (type === "new-package") return { context: state.route.startsWith("project:") ? currentProject().name : "套件庫", title: "登記套件", body: packageForm() };
   if (type === "edit-package") {
     const pkg = packages.find(item => item.id === payload.packageId) || {};
@@ -2012,6 +2051,39 @@ document.addEventListener("click", async event => {
         categoryDeleteButton.dataset.armed = "false";
         categoryDeleteButton.classList.remove("is-armed");
         categoryDeleteButton.textContent = "刪除";
+      }, 3500);
+    }
+    return;
+  }
+  const libraryCategoryEditButton = event.target.closest("[data-library-category-edit]");
+  if (libraryCategoryEditButton) {
+    const kind = libraryCategoryEditButton.dataset.categoryKind;
+    openDrawer(kind === "package" ? "edit-package-category" : "edit-prompt-category", { category: libraryCategoryEditButton.dataset.libraryCategoryEdit });
+    return;
+  }
+  const libraryCategoryDeleteButton = event.target.closest("[data-library-category-delete]");
+  if (libraryCategoryDeleteButton) {
+    const kind = libraryCategoryDeleteButton.dataset.categoryKind;
+    const category = libraryCategoryDeleteButton.dataset.libraryCategoryDelete;
+    const config = libraryCategoryConfig(kind);
+    if (libraryCategoryDeleteButton.dataset.armed === "true") {
+      config.records.forEach(record => { if (record[config.field] === category) record[config.field] = "未分類"; });
+      const index = config.categories.indexOf(category);
+      if (index >= 0) config.categories.splice(index, 1);
+      render();
+      drawerContext.textContent = kind === "package" ? "套件庫" : "提示詞庫";
+      drawerTitle.textContent = "管理分類";
+      drawerBody.innerHTML = libraryCategoryManager(kind);
+      showToast(`已刪除「${category}」，原有資料已移到未分類`);
+    } else {
+      libraryCategoryDeleteButton.dataset.armed = "true";
+      libraryCategoryDeleteButton.classList.add("is-armed");
+      libraryCategoryDeleteButton.textContent = "再次點擊刪除";
+      setTimeout(() => {
+        if (!libraryCategoryDeleteButton.isConnected) return;
+        libraryCategoryDeleteButton.dataset.armed = "false";
+        libraryCategoryDeleteButton.classList.remove("is-armed");
+        libraryCategoryDeleteButton.textContent = "刪除";
       }, 3500);
     }
     return;
@@ -2554,6 +2626,35 @@ document.addEventListener("submit", async event => {
     drawerContext.textContent = "網站素材庫";
     drawerTitle.textContent = "管理分類";
     drawerBody.innerHTML = categoryManager();
+    showToast(oldCategory ? `已將分類改名為「${name}」` : `已新增分類「${name}」`);
+    return;
+  }
+  const libraryCategoryEditor = event.target.closest("[data-library-category-form]");
+  if (libraryCategoryEditor) {
+    event.preventDefault();
+    const kind = libraryCategoryEditor.dataset.categoryKind;
+    const config = libraryCategoryConfig(kind);
+    const oldCategory = libraryCategoryEditor.dataset.oldCategory || "";
+    const field = libraryCategoryEditor.querySelector('[name="categoryName"]');
+    const error = libraryCategoryEditor.querySelector(".category-form-error");
+    const name = field.value.trim().replace(/\s+/g, " ");
+    const duplicate = config.categories.some(category => category !== oldCategory && category.toLowerCase() === name.toLowerCase());
+    if (!name || duplicate || name === "未分類") {
+      error.textContent = duplicate || name === "未分類" ? "已有相同名稱的分類，請換一個名稱。" : "請輸入分類名稱。";
+      field.focus();
+      return;
+    }
+    if (oldCategory) {
+      const index = config.categories.indexOf(oldCategory);
+      if (index >= 0) config.categories[index] = name;
+      config.records.forEach(record => { if (record[config.field] === oldCategory) record[config.field] = name; });
+    } else {
+      config.categories.splice(Math.max(0, config.categories.length - 1), 0, name);
+    }
+    render();
+    drawerContext.textContent = kind === "package" ? "套件庫" : "提示詞庫";
+    drawerTitle.textContent = "管理分類";
+    drawerBody.innerHTML = libraryCategoryManager(kind);
     showToast(oldCategory ? `已將分類改名為「${name}」` : `已新增分類「${name}」`);
     return;
   }
