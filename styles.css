@@ -478,8 +478,8 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .category-drag:focus-visible { outline: 3px solid color-mix(in srgb, var(--focus) 32%, transparent); outline-offset: 2px; }
 .category-drag svg { width: 16px; height: 16px; }
 .category-row > span strong, .category-row > span small { display: block; }
-.category-row > span strong { font-size: 14px; }
-.category-row > span small { margin-top: 3px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.category-row > span strong { font-size: 14px; overflow-wrap: anywhere; }
+.category-row > span small { margin-top: 3px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .category-row > div { display: flex; align-items: center; gap: 6px; }
 .category-row .outline-button, .category-delete { min-height: 34px; padding: 0 10px; }
 .category-delete { color: var(--danger); background: transparent; border: 1px solid #d8aaa0; border-radius: 8px; font-size: 12px; font-weight: 750; cursor: pointer; }
@@ -953,9 +953,9 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .task-side { grid-column: 2; justify-content: flex-start; }
   .resource-row { grid-template-columns: 1fr; }
   .toolbar { align-items: stretch; flex-direction: column; }
-  .toolbar-group { overflow-x: auto; }
-  .library-toolbar .toolbar-group, .note-toolbar .toolbar-group { overflow-x: visible; }
-  .note-toolbar .toolbar-group { flex-wrap: wrap; }
+  /* 手機一律自動換行，不用左右滑動才能看到全部分類 */
+  .toolbar-group { flex-wrap: wrap; overflow-x: visible; }
+  .toolbar-group .filter-chip { max-width: 100%; height: auto; padding-block: 7px; white-space: normal; }
   .small-search { width: 100%; }
   .project-table { background: transparent; border-top: 0; }
   .table-head { display: none; }
