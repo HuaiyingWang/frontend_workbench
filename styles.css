@@ -148,6 +148,21 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .focus-cell span { color: #94998e; font-size: 13px; letter-spacing: .08em; }
 .focus-cell strong { font-size: 36px; font-variant-numeric: tabular-nums; line-height: 1; }
 .focus-cell small { color: #b2b6ac; font-size: 14px; }
+.focus-cell--link { position: relative; gap: 14px; transition: background-color .2s ease; }
+.focus-cell--link:hover { background: #292c26; }
+.focus-cell-link { display: flex; flex: 1 1 auto; flex-direction: column; justify-content: space-between; gap: 14px; padding: 0; color: inherit; background: transparent; border: 0; font: inherit; text-align: left; cursor: pointer; }
+/* 讓整格都能點擊；等待中專案的名稱用 z-index 疊在上方 */
+.focus-cell-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.focus-cell-link:focus-visible { outline: 0; }
+.focus-cell-link:focus-visible::after { outline: 2px solid var(--signal); outline-offset: -4px; }
+.focus-cell-link strong { transition: transform .15s ease; transform-origin: left; }
+.focus-cell-link:active strong { transform: scale(.96); }
+.focus-waiting { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1.5; overflow-wrap: anywhere; }
+.focus-cell .focus-waiting span { color: #b2b6ac; font-size: 13px; letter-spacing: 0; }
+.focus-waiting-link { max-width: 100%; padding: 0; color: #e6eadf; background: transparent; border: 0; border-radius: 3px; font: inherit; text-align: left; text-decoration: underline; text-decoration-color: #6d7266; text-underline-offset: 3px; cursor: pointer; transition: color .15s ease, text-decoration-color .15s ease; }
+.focus-waiting-link:hover { color: var(--signal); text-decoration-color: var(--signal); }
+.focus-waiting-link:active { opacity: .8; }
+.focus-waiting-link:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
 .focus-choice-note { display: flex; gap: 13px; padding: 16px; background: #f1efe5; border: 1px solid var(--line); border-radius: 12px; }
 .focus-choice-note > span { display: grid; flex: 0 0 34px; height: 34px; place-items: center; color: #26291f; background: var(--signal); border-radius: 50%; }
 .focus-choice-note svg { width: 17px; height: 17px; }

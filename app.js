@@ -300,6 +300,18 @@ function renderSettings() {
   </div>`;
 }
 
+// 首頁「進行中專案」：整格連到篩選後的專案頁，並列出等待中的專案名稱（名稱按鈕疊在整格連結之上）
+function activeProjectsCell() {
+  const activeCount = projects.filter(project => project.statusClass !== "done").length;
+  const waiting = projects.filter(project => project.statusClass === "waiting");
+  const shown = waiting.slice(0, 2).map(project => `<button type="button" class="focus-waiting-link" data-project="${escapeHtml(project.id)}" aria-label="開啟等待中專案 ${escapeHtml(project.name)}（${escapeHtml(project.status)}）">${escapeHtml(project.name)}</button>`).join("");
+  const more = waiting.length > 2 ? `<span class="focus-waiting-more">另外 ${waiting.length - 2} 件</span>` : "";
+  return `<div class="focus-cell focus-cell--link">
+        <button type="button" class="focus-cell-link" data-project-filter="進行中" aria-label="查看 ${activeCount} 個進行中專案"><span>進行中專案</span><strong>${String(activeCount).padStart(2, "0")}</strong></button>
+        <small class="focus-waiting">${waiting.length ? `<span>${waiting.length} 件等待中</span>${shown}${more}` : "沒有等待中的專案"}</small>
+      </div>`;
+}
+
 function renderDashboard() {
   const openTasks = tasks.filter(task => !task.done).length;
   const manualFocus = projects.find(project => project.isFocus);
@@ -317,7 +329,7 @@ function renderDashboard() {
         <button class="focus-switch" data-action="choose-focus">${icon("edit")}<span>切換焦點</span></button>
       </div>
       <div class="focus-cell"><span>待處理修改</span><strong>${String(openTasks).padStart(2, "0")}</strong><small>${tasks.filter(task => !task.done && task.priority === "high").length} 件高優先</small></div>
-      <div class="focus-cell"><span>進行中專案</span><strong>${String(projects.filter(project => project.statusClass !== "done").length).padStart(2, "0")}</strong><small>${projects.filter(project => project.statusClass === "waiting").length} 件等待確認</small></div>
+      ${activeProjectsCell()}
     </section>
 
     <div class="dashboard-grid">
@@ -357,11 +369,11 @@ function projectLine(project) {
 }
 
 function renderProjects() {
-  const filtered = state.filter === "全部" ? projects : projects.filter(p => p.status === state.filter);
+  const filtered = state.filter === "全部" ? projects : state.filter === "進行中" ? projects.filter(p => p.statusClass !== "done") : projects.filter(p => p.status === state.filter);
   return `<div class="page">
     ${pageHead("專案", "從最近的製作狀態切入，保留每個網站的素材、修改與技術脈絡。", `<button class="primary-button" data-action="new-project">${icon("plus")}<span>建立專案</span></button>`)}
     <div class="toolbar">
-      <div class="toolbar-group" aria-label="專案篩選">${["全部", "製作中", "等待資料", "修改中", "已交付"].map(label => `<button class="filter-chip ${state.filter === label ? "is-active" : ""}" data-filter="${label}">${label}</button>`).join("")}</div>
+      <div class="toolbar-group" aria-label="專案篩選">${["全部", "進行中", "製作中", "等待資料", "修改中", "待確認", "已交付"].map(label => `<button class="filter-chip ${state.filter === label ? "is-active" : ""}" data-filter="${label}">${label}</button>`).join("")}</div>
       <input class="small-search" id="projectSearch" type="search" placeholder="搜尋專案或客戶" aria-label="搜尋專案或客戶">
     </div>
     <section class="project-table" aria-label="專案列表">
@@ -2141,6 +2153,8 @@ document.addEventListener("click", async event => {
   if (imageDrop && !event.target.closest("button")) { imageDrop.querySelector("[data-image-file]")?.click(); return; }
   const fileDrop = event.target.closest("[data-file-drop]");
   if (fileDrop && !event.target.closest("button")) { fileDrop.querySelector("[data-file-input]")?.click(); return; }
+  const projectFilter = event.target.closest("[data-project-filter]")?.dataset.projectFilter;
+  if (projectFilter) { state.filter = projectFilter; navigate("projects"); return; }
   const route = event.target.closest("[data-route]")?.dataset.route;
   if (route) { navigate(route); return; }
   const project = event.target.closest("[data-project]")?.dataset.project;
