@@ -469,6 +469,14 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .category-form-error { min-height: 16px; color: var(--danger); font-size: 12px; }
 .category-list { background: var(--sheet); border-top: 2px solid var(--ink); }
 .category-row { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.category-row > span { flex: 1 1 auto; min-width: 0; }
+.category-row.is-dragging { background: #f5f3e9; box-shadow: 0 6px 18px rgba(23, 24, 21, .1); }
+/* touch-action: none 讓觸控拖曳不會變成捲動頁面 */
+.category-drag { flex: 0 0 auto; width: 34px; height: 34px; display: grid; place-items: center; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 8px; cursor: grab; touch-action: none; transition: color .18s ease, border-color .18s ease, background .18s ease; }
+.category-drag:hover:not(:disabled) { color: var(--ink); background: #f5f3e9; border-color: var(--line-strong); }
+.category-drag:active:not(:disabled) { cursor: grabbing; background: #eeece1; }
+.category-drag:focus-visible { outline: 3px solid color-mix(in srgb, var(--focus) 32%, transparent); outline-offset: 2px; }
+.category-drag svg { width: 16px; height: 16px; }
 .category-row > span strong, .category-row > span small { display: block; }
 .category-row > span strong { font-size: 14px; }
 .category-row > span small { margin-top: 3px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -987,8 +995,10 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .asset-url-input .outline-button { width: 100%; min-height: 44px; }
   .category-create-row { grid-template-columns: 1fr; }
   .category-create-row .primary-button { width: 100%; min-height: 44px; }
-  .category-row { align-items: flex-start; flex-direction: column; }
-  .category-row > div { width: 100%; }
+  /* 握把與分類名稱同一列，操作按鈕移到下一列 */
+  .category-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; }
+  .category-drag { width: 44px; height: 44px; } /* 行動端點擊區域至少 44px */
+  .category-row > div { grid-column: 1 / -1; width: 100%; }
   .category-row > div button { flex: 1; min-height: 44px; }
   .data-row { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; }
   .package-row { grid-template-columns: 1fr; padding: 10px 0 0; }

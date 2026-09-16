@@ -1748,10 +1748,10 @@ function categoryManager() {
     <form class="category-create" data-category-form>
       <div class="form-field"><label for="categoryName">新增分類</label><div class="category-create-row"><input id="categoryName" name="categoryName" required maxlength="18" placeholder="例如：餐飲網站"><button class="primary-button" type="submit">新增</button></div><small class="category-form-error" aria-live="polite"></small></div>
     </form>
-    <div class="category-list" aria-label="網站分類列表">${siteCategories.map(category => {
+    <div class="category-list" data-category-kind="site" aria-label="網站分類列表">${siteCategories.map(category => {
       const count = assets.filter(asset => asset.category === category).length;
       const locked = category === "未分類";
-      return `<div class="category-row" data-category-row="${escapeHtml(category)}"><span><strong>${escapeHtml(category)}</strong><small>${count} 個網站${locked ? " · 系統分類" : ""}</small></span><div><button class="outline-button" data-category-edit="${escapeHtml(category)}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-category-delete="${escapeHtml(category)}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
+      return `<div class="category-row" data-category-row="${escapeHtml(category)}" data-category-name="${escapeHtml(category)}" ${locked ? `data-category-locked="true"` : ""}>${categoryDragHandle(category, locked)}<span><strong>${escapeHtml(category)}</strong><small>${count} 個網站${locked ? " · 系統分類" : ""}</small></span><div><button class="outline-button" data-category-edit="${escapeHtml(category)}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-category-delete="${escapeHtml(category)}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
     }).join("")}</div>
     <p class="category-footnote">刪除使用中的分類時，原有網站會移到「未分類」。</p>
   </div>`;
@@ -1774,10 +1774,10 @@ function libraryCategoryManager(kind) {
     <form class="category-create" data-library-category-form data-category-kind="${kind}">
       <div class="form-field"><label for="libraryCategoryName">新增分類</label><div class="category-create-row"><input id="libraryCategoryName" name="categoryName" required maxlength="18" placeholder="${config.placeholder}"><button class="primary-button" type="submit">新增</button></div><small class="category-form-error" aria-live="polite"></small></div>
     </form>
-    <div class="category-list" aria-label="${config.title}列表">${config.categories.map(category => {
+    <div class="category-list" data-category-kind="${kind}" aria-label="${config.title}列表">${config.categories.map(category => {
       const count = config.records.filter(record => record[config.field] === category).length;
       const locked = category === "未分類";
-      return `<div class="category-row"><span><strong>${escapeHtml(category)}</strong><small>${count} ${config.unit}${locked ? " · 系統分類" : ""}</small></span><div><button class="outline-button" data-library-category-edit="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-library-category-delete="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
+      return `<div class="category-row" data-category-name="${escapeHtml(category)}" ${locked ? `data-category-locked="true"` : ""}>${categoryDragHandle(category, locked)}<span><strong>${escapeHtml(category)}</strong><small>${count} ${config.unit}${locked ? " · 系統分類" : ""}</small></span><div><button class="outline-button" data-library-category-edit="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-library-category-delete="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
     }).join("")}</div>
     <p class="category-footnote">刪除使用中的分類時，原有資料會移到「未分類」。</p>
   </div>`;
@@ -1787,6 +1787,40 @@ function libraryCategoryEditForm(kind, category) {
   const config = libraryCategoryConfig(kind);
   const count = config.records.filter(record => record[config.field] === category).length;
   return `<form class="form-stack" data-library-category-form data-category-kind="${kind}" data-old-category="${escapeHtml(category)}"><div class="category-edit-summary"><strong>${escapeHtml(category)}</strong><span>${count} ${config.unit}會同步更新分類名稱</span></div><div class="form-field"><label for="libraryCategoryName">分類名稱</label><input id="libraryCategoryName" name="categoryName" required maxlength="18" value="${escapeHtml(category)}"><small class="category-form-error" aria-live="polite"></small></div><button class="primary-button drawer-submit" type="submit">儲存分類名稱</button><button class="outline-button drawer-wide-action" type="button" data-action="${config.manageAction}">返回分類列表</button></form>`;
+}
+
+// ========================================
+// 分類排序：拖曳與鍵盤共用同一套搬移流程
+// ========================================
+
+function categoryDragHandle(category, locked) {
+  return locked
+    ? `<button type="button" class="category-drag" disabled aria-label="「${escapeHtml(category)}」固定排在最後">${icon("grip")}</button>`
+    : `<button type="button" class="category-drag" data-category-drag aria-label="調整「${escapeHtml(category)}」的順序，可拖曳或按上下方向鍵">${icon("grip")}</button>`;
+}
+
+function categoryListFor(kind) {
+  return kind === "site" ? siteCategories : libraryCategoryConfig(kind).categories;
+}
+
+function categoryManagerMarkup(kind) {
+  return kind === "site" ? categoryManager() : libraryCategoryManager(kind);
+}
+
+/**
+ * 以目前的 DOM 排列更新分類陣列，再重建抽屜內容
+ * @param {HTMLElement} listEl - .category-list 容器
+ * @param {string} focusCategory - 重建後要重新聚焦的分類（鍵盤操作用）
+ */
+function commitCategoryOrder(listEl, focusCategory = "") {
+  const kind = listEl.dataset.categoryKind;
+  const list = categoryListFor(kind);
+  const names = [...listEl.querySelectorAll("[data-category-name]")].map(row => row.dataset.categoryName);
+  if (names.length !== list.length) return;
+  list.splice(0, list.length, ...names);
+  render();
+  drawerBody.innerHTML = categoryManagerMarkup(kind);
+  if (focusCategory) drawerBody.querySelector(`[data-category-name="${CSS.escape(focusCategory)}"] [data-category-drag]`)?.focus();
 }
 
 function focusProjectForm() {
@@ -3083,6 +3117,61 @@ function closeMobileMenu() {
   mobileMenu.setAttribute("aria-expanded", "false");
   if (!drawer.classList.contains("is-open")) scrim.hidden = true;
 }
+
+// ── 分類拖曳排序（滑鼠與觸控共用 Pointer Events）──
+let categoryDrag = null;
+
+document.addEventListener("pointerdown", event => {
+  const handle = event.target.closest("[data-category-drag]");
+  if (!handle) return;
+  const row = handle.closest(".category-row");
+  const listEl = row?.parentElement;
+  if (!listEl) return;
+  categoryDrag = { row, listEl, order: [...listEl.querySelectorAll("[data-category-name]")].map(item => item.dataset.categoryName) };
+  row.classList.add("is-dragging");
+  handle.setPointerCapture(event.pointerId);
+  event.preventDefault(); // 避免拖曳時選取文字
+});
+
+document.addEventListener("pointermove", event => {
+  if (!categoryDrag) return;
+  const over = [...categoryDrag.listEl.querySelectorAll(".category-row")].find(row => {
+    if (row === categoryDrag.row || row.dataset.categoryLocked === "true") return false;
+    const bounds = row.getBoundingClientRect();
+    return event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+  });
+  if (!over) return;
+  const movingDown = Boolean(over.compareDocumentPosition(categoryDrag.row) & Node.DOCUMENT_POSITION_PRECEDING);
+  categoryDrag.listEl.insertBefore(categoryDrag.row, movingDown ? over.nextSibling : over);
+});
+
+function endCategoryDrag() {
+  if (!categoryDrag) return;
+  const { row, listEl, order } = categoryDrag;
+  categoryDrag = null;
+  row.classList.remove("is-dragging");
+  const moved = [...listEl.querySelectorAll("[data-category-name]")].some((item, index) => item.dataset.categoryName !== order[index]);
+  if (!moved) return;
+  commitCategoryOrder(listEl);
+  showToast("已更新分類順序");
+}
+
+document.addEventListener("pointerup", endCategoryDrag);
+document.addEventListener("pointercancel", endCategoryDrag);
+
+// 鍵盤操作：聚焦握把後用上下方向鍵移動
+document.addEventListener("keydown", event => {
+  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+  const handle = event.target.closest?.("[data-category-drag]");
+  if (!handle) return;
+  event.preventDefault();
+  const row = handle.closest(".category-row");
+  const listEl = row.parentElement;
+  const sibling = event.key === "ArrowUp" ? row.previousElementSibling : row.nextElementSibling;
+  if (!sibling || !sibling.classList.contains("category-row") || sibling.dataset.categoryLocked === "true") return;
+  listEl.insertBefore(...(event.key === "ArrowUp" ? [row, sibling] : [sibling, row]));
+  commitCategoryOrder(listEl, row.dataset.categoryName);
+});
 
 restoreLocalData().then(async () => {
   await unlockCachedConnections();
