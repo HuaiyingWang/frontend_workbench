@@ -901,14 +901,16 @@ function fileSyncCounts() {
 function mergeImages(remoteImages = [], localImages = []) {
   const localById = new Map(localImages.map(image => [image.id, image]));
   const merged = remoteImages.map(image => ({ ...image, ...(localById.get(image.id)?.dataUrl ? { dataUrl: localById.get(image.id).dataUrl } : {}) }));
-  localImages.filter(image => !image.cloudPath && !remoteImages.some(remote => remote.id === image.id)).forEach(image => merged.push(image));
+  // 只保留還有內容、真的等待上傳的本機圖片；空紀錄不再復活已同步的刪除
+  localImages.filter(image => image.dataUrl && !image.cloudPath && !remoteImages.some(remote => remote.id === image.id)).forEach(image => merged.push(image));
   return merged;
 }
 
 function mergeFiles(remoteFiles = [], localFiles = []) {
   const localById = new Map(localFiles.map(file => [file.id, file]));
   const merged = remoteFiles.map(file => ({ ...file, ...(localById.get(file.id)?.dataUrl ? { dataUrl: localById.get(file.id).dataUrl } : {}) }));
-  localFiles.filter(file => !file.cloudPath && !remoteFiles.some(remote => remote.id === file.id)).forEach(file => merged.push(file));
+  // 同上：沒有內容又沒上傳過的空紀錄，代表已在其他裝置刪除，不要加回來
+  localFiles.filter(file => file.dataUrl && !file.cloudPath && !remoteFiles.some(remote => remote.id === file.id)).forEach(file => merged.push(file));
   return merged;
 }
 
