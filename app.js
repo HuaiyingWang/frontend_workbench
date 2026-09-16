@@ -979,7 +979,8 @@ async function cacheRequest(mode, action) {
 
 function persistLocalData() {
   try {
-    const cached = withoutDeviceImages(plainDataSnapshot());
+    // 保留圖片與附件的 dataUrl：內容只留在記憶體時，重新整理就會遺失且再也無法上傳
+    const cached = plainDataSnapshot();
     delete cached.projectConnections;
     cached.sensitiveConnections = connectionsEnvelope;
     // 同步版本與資料寫在同一筆，避免其他分頁覆蓋資料後版本號對不上
@@ -1590,8 +1591,13 @@ async function pasteImagesFromClipboard(key) {
   }
 }
 
+function fileSyncLabel(file) {
+  if (file.cloudPath) return " · 已同步";
+  return file.dataUrl ? " · 待上傳" : " · 內容已遺失，請重新加入";
+}
+
 function filePreviewItems(files = [], removable = true) {
-  return files.map(file => `<div class="file-upload-item"><button type="button" class="file-download" data-download-file="${escapeHtml(file.id)}"><span class="file-mark">${icon("download")}</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.type || "未知格式")} · ${formatFileSize(file.size)}${file.cloudPath ? " · 已同步" : " · 待同步"}</small></span></button>${removable ? `<button type="button" class="file-remove" data-file-remove="${escapeHtml(file.id)}" aria-label="移除 ${escapeHtml(file.name)}">${icon("close")}</button>` : ""}</div>`).join("");
+  return files.map(file => `<div class="file-upload-item"><button type="button" class="file-download" data-download-file="${escapeHtml(file.id)}"><span class="file-mark">${icon("download")}</span><span><strong>${escapeHtml(file.name)}</strong><small>${escapeHtml(file.type || "未知格式")} · ${formatFileSize(file.size)}${fileSyncLabel(file)}</small></span></button>${removable ? `<button type="button" class="file-remove" data-file-remove="${escapeHtml(file.id)}" aria-label="移除 ${escapeHtml(file.name)}">${icon("close")}</button>` : ""}</div>`).join("");
 }
 
 function fileUploadField(key, files = [], label = "相關文件") {
@@ -2037,7 +2043,11 @@ document.addEventListener("click", async event => {
     if (!file) return;
     try {
       if (!file.dataUrl && file.cloudPath && syncToken()) file.dataUrl = await readGithubBinaryDataUrl(file.cloudPath, syncToken(), file.type);
-      if (!file.dataUrl) throw new Error("這個文件尚未同步，請先儲存並上傳目前資料。");
+      if (!file.dataUrl) {
+        throw new Error(file.cloudPath
+          ? "這個文件存在雲端，請先到「同步與備份」設定 Token 後再下載。"
+          : "這個文件的內容沒有上傳到 GitHub，已經無法下載，請重新加入檔案後按「上傳目前資料」。");
+      }
       const link = document.createElement("a");
       link.href = file.dataUrl;
       link.download = file.name || "document";
