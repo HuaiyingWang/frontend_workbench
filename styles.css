@@ -951,7 +951,12 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .filter-chip, .project-tab { min-height: 44px; }
   .icon-button, .top-actions .primary-button { width: 44px; height: 44px; }
   .task-side { grid-column: 2; justify-content: flex-start; }
-  .resource-row { grid-template-columns: 1fr; }
+  /* 手機仍維持一列三張，縮小內距與字級以容納 */
+  .resource-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .resource-tile { padding: 12px 10px; }
+  .resource-tile svg { width: 18px; height: 18px; }
+  .resource-tile strong { margin-top: 12px; font-size: 13px; }
+  .resource-tile small { font-size: 11px; }
   .toolbar { align-items: stretch; flex-direction: column; }
   /* 手機一律自動換行，不用左右滑動才能看到全部分類 */
   .toolbar-group { flex-wrap: wrap; overflow-x: visible; }
