@@ -193,6 +193,17 @@ function formatProjectUpdated(value, fallback = "尚無紀錄") {
   return raw;
 }
 
+/**
+ * 交付日期顯示格式：同一年只顯示月日，跨年才補上年份
+ * @param {string} value - YYYY-MM-DD，未設定時回傳 fallback
+ */
+function formatDeliveryDate(value, fallback = "尚未設定") {
+  const match = String(value ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return fallback;
+  const [, year, month, day] = match;
+  return Number(year) === new Date().getFullYear() ? `${month} 月 ${day} 日` : `${year} 年 ${month} 月 ${day} 日`;
+}
+
 function projectUpdatedTimestamp(project) {
   const raw = String(project?.updated ?? "").trim();
   const now = new Date();
@@ -305,7 +316,7 @@ function renderDashboard() {
         </button>
         <button class="focus-switch" data-action="choose-focus">${icon("edit")}<span>切換焦點</span></button>
       </div>
-      <div class="focus-cell"><span>今日待處理</span><strong>${String(openTasks).padStart(2, "0")}</strong><small>2 件高優先</small></div>
+      <div class="focus-cell"><span>待處理修改</span><strong>${String(openTasks).padStart(2, "0")}</strong><small>${tasks.filter(task => !task.done && task.priority === "high").length} 件高優先</small></div>
       <div class="focus-cell"><span>進行中專案</span><strong>${String(projects.filter(project => project.statusClass !== "done").length).padStart(2, "0")}</strong><small>${projects.filter(project => project.statusClass === "waiting").length} 件等待確認</small></div>
     </section>
 
@@ -409,7 +420,7 @@ function renderProjectTab(project) {
       <section class="project-summary">
         <button class="summary-cell project-stage-trigger" data-action="edit-project-stage" aria-label="修改目前階段：${escapeHtml(project.status)}"><span>目前階段</span><strong><span class="status ${project.statusClass}">${escapeHtml(project.status)}</span></strong><small>點擊修改</small></button>
         <div class="summary-cell"><span>待處理修改</span><strong>${projectTaskCount(project.id)} 件</strong></div>
-        <div class="summary-cell"><span>下次交付</span><strong>09 月 18 日</strong></div>
+        <button class="summary-cell project-stage-trigger" data-action="edit-project-due" aria-label="修改交付日期：${escapeHtml(formatDeliveryDate(project.deliveryDate))}"><span>下次交付</span><strong>${escapeHtml(formatDeliveryDate(project.deliveryDate))}</strong><small>點擊修改</small></button>
       </section>
       ${renderProjectImages(project)}
       <section class="section" style="margin-top:28px">
@@ -1665,7 +1676,7 @@ function currentProject() {
 }
 
 function projectCreateForm() {
-  return `<form class="form-stack" data-project-create-form><div class="form-field"><label for="projectName">專案名稱</label><input id="projectName" name="name" required placeholder="例如：品牌秋季形象網站"></div><div class="form-field"><label for="clientName">客戶／用途</label><input id="clientName" name="client" placeholder="客戶名稱或個人專案"></div><div class="form-field"><label>選擇起始模板</label><div class="template-options"><button type="button" class="template-option is-selected" data-template="PHP 官網"><strong>PHP 官網</strong><small>共用版型、表單與資源目錄</small></button><button type="button" class="template-option" data-template="靜態 HTML"><strong>靜態 HTML</strong><small>精簡頁面與資源結構</small></button><button type="button" class="template-option" data-template="活動頁"><strong>活動頁</strong><small>分享資訊與倒數模組</small></button><button type="button" class="template-option" data-template="空白專案"><strong>空白專案</strong><small>只建立必要目錄</small></button></div></div><div class="form-field"><label for="projectPath">預計本機路徑</label><input id="projectPath" name="path" value="C:/Projects/" spellcheck="false"><small>原型階段不會真的建立資料夾。</small></div>${imageUploadField("project-new", [], "專案圖片")}${connectionFormFields()}<button class="primary-button drawer-submit" type="submit">建立原型專案</button></form>`;
+  return `<form class="form-stack" data-project-create-form><div class="form-field"><label for="projectName">專案名稱</label><input id="projectName" name="name" required placeholder="例如：品牌秋季形象網站"></div><div class="form-field"><label for="clientName">客戶／用途</label><input id="clientName" name="client" placeholder="客戶名稱或個人專案"></div><div class="form-field"><label>選擇起始模板</label><div class="template-options"><button type="button" class="template-option is-selected" data-template="PHP 官網"><strong>PHP 官網</strong><small>共用版型、表單與資源目錄</small></button><button type="button" class="template-option" data-template="靜態 HTML"><strong>靜態 HTML</strong><small>精簡頁面與資源結構</small></button><button type="button" class="template-option" data-template="活動頁"><strong>活動頁</strong><small>分享資訊與倒數模組</small></button><button type="button" class="template-option" data-template="空白專案"><strong>空白專案</strong><small>只建立必要目錄</small></button></div></div><div class="form-field"><label for="projectPath">預計本機路徑</label><input id="projectPath" name="path" value="C:/Projects/" spellcheck="false"><small>原型階段不會真的建立資料夾。</small></div><div class="form-field"><label for="projectNewDueDate">交付日期</label><input id="projectNewDueDate" name="deliveryDate" type="date"><small>可留空白，之後在專案總覽修改。</small></div>${imageUploadField("project-new", [], "專案圖片")}${connectionFormFields()}<button class="primary-button drawer-submit" type="submit">建立原型專案</button></form>`;
 }
 
 function projectStageForm(project) {
@@ -1673,6 +1684,14 @@ function projectStageForm(project) {
     <div class="project-stage-summary"><span>正在修改</span><strong>${escapeHtml(project.name)}</strong><small>變更後會同步更新首頁與專案列表。</small></div>
     <fieldset class="project-stage-options"><legend>選擇目前階段</legend>${projectStages.map(stage => `<label class="project-stage-option"><input type="radio" name="stage" value="${escapeHtml(stage.label)}" ${project.status === stage.label ? "checked" : ""}><span class="status ${stage.className}">${escapeHtml(stage.label)}</span><small>${escapeHtml(stage.note)}</small></label>`).join("")}</fieldset>
     <button class="primary-button drawer-submit" type="submit">儲存專案階段</button>
+  </form>`;
+}
+
+function projectDueForm(project) {
+  return `<form class="form-stack" data-project-due-form>
+    <div class="project-stage-summary"><span>正在修改</span><strong>${escapeHtml(project.name)}</strong><small>交付日期會顯示在專案總覽。</small></div>
+    <div class="form-field"><label for="projectDueDate">交付日期</label><input id="projectDueDate" name="deliveryDate" type="date" value="${escapeHtml(project.deliveryDate || "")}"><small>留空白代表尚未排定交付日。</small></div>
+    <button class="primary-button drawer-submit" type="submit">儲存交付日期</button>
   </form>`;
 }
 
@@ -1917,6 +1936,11 @@ function drawerContent(type, payload) {
     context: currentProject().name,
     title: "修改目前階段",
     body: projectStageForm(currentProject())
+  };
+  if (type === "edit-project-due") return {
+    context: currentProject().name,
+    title: "修改交付日期",
+    body: projectDueForm(currentProject())
   };
   if (type === "edit-connection") return {
     context: "專案設定",
@@ -2856,7 +2880,7 @@ document.addEventListener("submit", async event => {
     const id = `project-${Date.now()}`;
     const template = projectCreator.querySelector(".template-option.is-selected")?.dataset.template || "空白專案";
     const images = (imageDrafts.get("project-new") || []).map(image => ({ ...image }));
-    projects.unshift({ id, code: name.replace(/\s/g, "").slice(0, 2).toUpperCase() || "PR", name, client: values.client.trim() || "個人專案", type: template, status: "製作中", statusClass: "active", revisions: 0, updated: "剛剛", path: values.path.trim(), images, tone: ["coral", "blue", "sage"][projects.length % 3] });
+    projects.unshift({ id, code: name.replace(/\s/g, "").slice(0, 2).toUpperCase() || "PR", name, client: values.client.trim() || "個人專案", type: template, status: "製作中", statusClass: "active", revisions: 0, updated: "剛剛", path: values.path.trim(), deliveryDate: String(values.deliveryDate || "").trim(), images, tone: ["coral", "blue", "sage"][projects.length % 3] });
     if (values.ftp.trim() || values.database.trim()) projectConnections[id] = { ftp: values.ftp.trim(), database: values.database.trim() };
     projectContacts[id] = [];
     projectNotes[id] = [];
@@ -2893,6 +2917,18 @@ document.addEventListener("submit", async event => {
     closeDrawer();
     render();
     showToast(`專案階段已改為「${selected.label}」`);
+    return;
+  }
+  const projectDueEditor = event.target.closest("[data-project-due-form]");
+  if (projectDueEditor) {
+    event.preventDefault();
+    const project = currentProject();
+    if (!project) return;
+    project.deliveryDate = String(new FormData(projectDueEditor).get("deliveryDate") || "").trim();
+    project.updated = "剛剛";
+    closeDrawer();
+    render();
+    showToast(project.deliveryDate ? `交付日期已設為 ${formatDeliveryDate(project.deliveryDate)}` : "已清除交付日期");
     return;
   }
   const revisionEditor = event.target.closest("[data-revision-form]");
