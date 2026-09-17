@@ -647,10 +647,12 @@ async function requestLinkPreview(pageUrl) {
   throw new Error("無法讀取這個網站的標題或預覽圖，請稍後再試或自行填寫標題。");
 }
 
+// 預設圖：抓不到預覽圖或圖片載入失敗時，用網站標題首字與網域組成的佔位畫面（圖片疊在上方，失敗時隱藏）
 function assetPreview(asset, detail = false) {
   const previewUrl = normalizeAssetImage(asset.previewUrl || asset.externalUrl);
-  const fallbackLabel = asset.preview === "logo" ? (asset.label || assetDomain(asset).slice(0, 5).toUpperCase()) : "";
-  return `<span class="asset-preview ${escapeHtml(asset.preview)} ${previewUrl ? "has-external-image" : ""} ${detail ? "asset-preview-detail" : ""}">${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(assetTitle(asset))} 網站預覽" loading="lazy">` : escapeHtml(fallbackLabel)}</span>`;
+  const domain = assetDomain(asset);
+  const initial = Array.from(assetTitle(asset).trim() || domain)[0]?.toUpperCase() || "W";
+  return `<span class="asset-preview ${previewUrl ? "has-external-image" : "is-fallback"} ${detail ? "asset-preview-detail" : ""}"><span class="asset-fallback" aria-hidden="true"><strong>${escapeHtml(initial)}</strong><small>${escapeHtml(domain)}</small></span>${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(assetTitle(asset))} 網站預覽" loading="lazy">` : ""}</span>`;
 }
 
 function assetCard(asset) {
@@ -1751,9 +1753,9 @@ function assetForm(asset = {}) {
   const selectedCategory = asset.category || "企業官網";
   const selectedSource = asset.source || "靈感蒐集";
   return `<form class="form-stack" data-asset-form data-asset-id="${escapeHtml(asset.id || "")}">
-    <div class="website-capture-intro">${icon("link")}<div><strong>貼上網站網址</strong><span>抓取完成後會自動帶入網站標題與分享預覽圖。</span></div></div>
+    <div class="website-capture-intro">${icon("link")}<div><strong>貼上網站網址</strong><span>抓取完成後會自動帶入網站標題與分享預覽圖；抓不到圖片也可以直接加入，會使用預設圖。</span></div></div>
     <div class="form-field asset-url-field"><label for="assetPageUrl">網站網址</label><div class="asset-url-input"><input id="assetPageUrl" name="pageUrl" type="url" required value="${escapeHtml(asset.pageUrl || "")}" placeholder="https://example.com" inputmode="url" spellcheck="false"><button type="button" class="outline-button" data-asset-preview-url>${asset.pageUrl ? "重新抓取" : "抓取網站資料"}</button></div><small>依序讀取網站標題、og:image、Twitter Card 與頁面代表圖。</small><input name="previewUrl" id="assetPreviewUrl" type="hidden" value="${escapeHtml(asset.previewUrl || asset.externalUrl || "")}"><input name="previewSource" id="assetPreviewSource" type="hidden" value="${escapeHtml(asset.previewSource || "")}"></div>
-    <div class="asset-url-preview ${asset.previewUrl || asset.externalUrl ? "has-image" : ""}" id="assetUrlPreview" aria-live="polite"><img ${asset.previewUrl || asset.externalUrl ? `src="${escapeHtml(asset.previewUrl || asset.externalUrl)}"` : ""} alt="網頁擷取預覽" ${asset.previewUrl || asset.externalUrl ? "" : "hidden"}><span id="assetUrlStatus">${asset.previewUrl || asset.externalUrl ? `已保存${asset.previewSource ? ` · ${escapeHtml(asset.previewSource)}` : ""}` : "貼上網頁網址後抓取預覽"}</span></div>
+    <div class="asset-url-preview ${asset.previewUrl || asset.externalUrl ? "has-image" : ""}" id="assetUrlPreview" aria-live="polite"><img ${asset.previewUrl || asset.externalUrl ? `src="${escapeHtml(asset.previewUrl || asset.externalUrl)}"` : ""} alt="網頁擷取預覽" ${asset.previewUrl || asset.externalUrl ? "" : "hidden"}><span id="assetUrlStatus">${asset.previewUrl || asset.externalUrl ? `已保存${asset.previewSource ? ` · ${escapeHtml(asset.previewSource)}` : ""}` : "貼上網頁網址後抓取預覽；沒有預覽圖時使用預設圖"}</span></div>
     <div class="form-field"><label for="assetName">網站標題</label><input id="assetName" name="title" required value="${escapeHtml(assetTitle(asset) === "未命名網站" ? "" : assetTitle(asset))}" placeholder="抓取後自動帶入，也可以自行修改"></div>
     <div class="form-grid"><div class="form-field"><label for="assetCategory">網站分類</label><select id="assetCategory" name="category">${siteCategories.map(category => `<option ${selectedCategory === category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}</select></div><div class="form-field"><label for="assetSource">收藏來源</label><select id="assetSource" name="source">${["靈感蒐集", "客戶參考", "同業案例", "技術研究", "動效參考"].map(source => `<option ${selectedSource === source ? "selected" : ""}>${source}</option>`).join("")}</select></div></div>
     <div class="form-field"><label for="assetProject">關聯專案</label><select id="assetProject" name="projectId"><option value="">未指定專案</option>${projects.map(project => `<option value="${project.id}" ${defaultProjectId === project.id ? "selected" : ""}>${escapeHtml(project.name)}</option>`).join("")}</select></div>
@@ -1928,7 +1930,7 @@ function checklistForm(item = {}) {
 
 function assetDetail(asset) {
   const pageUrl = normalizeHttpUrl(asset.pageUrl);
-  return `<div class="asset-detail">${assetPreview(asset, true)}<div class="asset-detail-name"><strong>${escapeHtml(assetTitle(asset))}</strong>${pageUrl ? `<button class="field-copy-button" data-copy="${escapeHtml(pageUrl)}">${icon("copy")}複製網址</button>` : ""}</div><dl>${pageUrl ? `<div><dt>網站網址</dt><dd><button class="asset-url-copy" data-copy="${escapeHtml(pageUrl)}">${icon("copy")}${escapeHtml(assetDomain(asset))}</button></dd></div>` : ""}<div><dt>網站分類</dt><dd>${escapeHtml(asset.category)}</dd></div><div><dt>收藏來源</dt><dd>${escapeHtml(asset.source)}</dd></div><div><dt>關聯專案</dt><dd>${escapeHtml(assetProjectName(asset))}</dd></div><div><dt>參考重點</dt><dd>${escapeHtml(asset.usage || "尚未記錄")}</dd></div><div><dt>標籤</dt><dd>${escapeHtml(asset.tags || "尚未加入")}</dd></div><div><dt>預覽來源</dt><dd>${escapeHtml(asset.previewSource || "示意預覽")}</dd></div></dl><div class="asset-detail-note"><strong>收藏備註</strong><p>${escapeHtml(asset.note || "尚未加入備註。")}</p></div>${pageUrl ? `<button class="outline-button drawer-wide-action" data-open-url="${escapeHtml(pageUrl)}">${icon("external")}開啟網站</button>` : ""}<button class="primary-button drawer-submit" data-asset-edit="${asset.id}">${icon("edit")}修改網站資料</button></div>`;
+  return `<div class="asset-detail">${assetPreview(asset, true)}<div class="asset-detail-name"><strong>${escapeHtml(assetTitle(asset))}</strong>${pageUrl ? `<button class="field-copy-button" data-copy="${escapeHtml(pageUrl)}">${icon("copy")}複製網址</button>` : ""}</div><dl>${pageUrl ? `<div><dt>網站網址</dt><dd><button class="asset-url-copy" data-copy="${escapeHtml(pageUrl)}">${icon("copy")}${escapeHtml(assetDomain(asset))}</button></dd></div>` : ""}<div><dt>網站分類</dt><dd>${escapeHtml(asset.category)}</dd></div><div><dt>收藏來源</dt><dd>${escapeHtml(asset.source)}</dd></div><div><dt>關聯專案</dt><dd>${escapeHtml(assetProjectName(asset))}</dd></div><div><dt>參考重點</dt><dd>${escapeHtml(asset.usage || "尚未記錄")}</dd></div><div><dt>標籤</dt><dd>${escapeHtml(asset.tags || "尚未加入")}</dd></div><div><dt>預覽來源</dt><dd>${escapeHtml(normalizeAssetImage(asset.previewUrl || asset.externalUrl) ? asset.previewSource || "網頁預覽" : "預設圖")}</dd></div></dl><div class="asset-detail-note"><strong>收藏備註</strong><p>${escapeHtml(asset.note || "尚未加入備註。")}</p></div>${pageUrl ? `<button class="outline-button drawer-wide-action" data-open-url="${escapeHtml(pageUrl)}">${icon("external")}開啟網站</button>` : ""}<button class="primary-button drawer-submit" data-asset-edit="${asset.id}">${icon("edit")}修改網站資料</button></div>`;
 }
 
 function drawerContent(type, payload) {
@@ -2376,7 +2378,9 @@ document.addEventListener("click", async event => {
       if (image) image.hidden = true;
       if (storedPreview) storedPreview.value = "";
       if (storedSource) storedSource.value = "";
-      status.textContent = error.message === "Failed to fetch" ? "瀏覽器無法跨網域讀取；請用 PHP 環境啟動後再試。" : error.message;
+      status.textContent = `${error.message === "Failed to fetch" ? "瀏覽器無法跨網域讀取。" : error.message}仍可直接加入，將使用預設圖。`;
+      const nameInput = document.querySelector("#assetName");
+      if (nameInput && !nameInput.value.trim()) nameInput.value = new URL(normalizedUrl).hostname.replace(/^www\./, "");
       previewUrlButton.textContent = "再次嘗試";
     } finally {
       previewUrlButton.disabled = false;
@@ -2622,8 +2626,8 @@ document.addEventListener("drop", async event => {
 
 document.addEventListener("error", event => {
   if (!event.target.matches?.(".asset-preview img")) return;
-  event.target.hidden = true;
-  event.target.closest(".asset-preview")?.classList.add("is-broken");
+  event.target.closest(".asset-preview")?.classList.replace("has-external-image", "is-fallback");
+  event.target.remove();
 }, true);
 
 function applyLibraryFilter() {
@@ -2898,13 +2902,6 @@ document.addEventListener("submit", async event => {
       preview?.classList.add("is-error");
       document.querySelector("#assetUrlStatus").textContent = "網址格式不正確，請使用 http／https。";
       document.querySelector("#assetPageUrl")?.focus();
-      return;
-    }
-    if (pageUrl && !previewUrl) {
-      const preview = document.querySelector("#assetUrlPreview");
-      preview?.classList.add("is-error");
-      document.querySelector("#assetUrlStatus").textContent = "請先抓取並確認這個網頁的預覽圖。";
-      document.querySelector("[data-asset-preview-url]")?.focus();
       return;
     }
     const existingId = assetEditor.dataset.assetId;
