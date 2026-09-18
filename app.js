@@ -420,8 +420,8 @@ function renderProjectDetail(project) {
   return `<div class="page">
     <header class="detail-head">
       <div>
-        <div class="breadcrumb"><button data-route="projects">專案</button><span>/</span><span>${project.client}</span></div>
-        <div class="detail-title"><span class="project-mini">${project.code}</span><h1>${project.name}</h1></div>
+        <div class="breadcrumb"><button data-route="projects">專案</button><span>/</span><span>${escapeHtml(project.client)}</span></div>
+        <div class="detail-title"><span class="project-mini">${escapeHtml(project.code)}</span><h1>${escapeHtml(project.name)}</h1><button type="button" class="icon-button detail-edit" data-action="edit-project-info" aria-label="編輯專案名稱與基本資料" title="編輯專案資訊">${icon("edit")}</button></div>
       </div>
       <div class="detail-actions"><button class="outline-button" data-copy="${escapeHtml(project.path || `C:/Projects/${project.id}`)}">${icon("copy")}複製專案路徑</button><button class="primary-button" data-action="capture">${icon("plus")}新增修改</button></div>
     </header>
@@ -1739,6 +1739,17 @@ function projectStageForm(project) {
   </form>`;
 }
 
+function projectInfoForm(project) {
+  const types = [...new Set(["PHP 官網", "靜態 HTML", "活動頁", "表單頁", "空白專案", ...projects.map(item => item.type).filter(Boolean)])];
+  return `<form class="form-stack" data-project-info-form>
+    <div class="form-field"><label for="projectInfoName">專案名稱</label><input id="projectInfoName" name="name" required aria-required="true" value="${escapeHtml(project.name)}"></div>
+    <div class="form-field"><label for="projectInfoClient">客戶／用途</label><input id="projectInfoClient" name="client" value="${escapeHtml(project.client || "")}" placeholder="客戶名稱或個人專案"></div>
+    <div class="form-grid"><div class="form-field"><label for="projectInfoType">專案類型</label><input id="projectInfoType" name="type" list="projectTypeOptions" value="${escapeHtml(project.type || "")}" placeholder="例如：PHP 官網"><datalist id="projectTypeOptions">${types.map(type => `<option value="${escapeHtml(type)}"></option>`).join("")}</datalist></div>
+    <div class="form-field"><label for="projectInfoCode">縮寫</label><input id="projectInfoCode" name="code" required aria-required="true" maxlength="4" value="${escapeHtml(project.code || "")}" aria-describedby="projectInfoCodeHint"><small id="projectInfoCodeHint">顯示在專案色塊，最多 4 個字。</small></div></div>
+    <button class="primary-button drawer-submit" type="submit">儲存專案資訊</button>
+  </form>`;
+}
+
 function projectDueForm(project) {
   return `<form class="form-stack" data-project-due-form>
     <div class="project-stage-summary"><span>正在修改</span><strong>${escapeHtml(project.name)}</strong><small>交付日期會顯示在專案總覽。</small></div>
@@ -2022,6 +2033,11 @@ function drawerContent(type, payload) {
     context: currentProject().name,
     title: "修改目前階段",
     body: projectStageForm(currentProject())
+  };
+  if (type === "edit-project-info") return {
+    context: currentProject().name,
+    title: "編輯專案資訊",
+    body: projectInfoForm(currentProject())
   };
   if (type === "edit-project-due") return {
     context: currentProject().name,
@@ -3004,6 +3020,26 @@ document.addEventListener("submit", async event => {
     closeDrawer();
     render();
     showToast(`專案階段已改為「${selected.label}」`);
+    return;
+  }
+  const projectInfoEditor = event.target.closest("[data-project-info-form]");
+  if (projectInfoEditor) {
+    event.preventDefault();
+    const project = currentProject();
+    const values = Object.fromEntries(new FormData(projectInfoEditor).entries());
+    const name = values.name.trim();
+    const code = values.code.trim();
+    if (!project || !name || !code) return;
+    project.name = name;
+    project.client = values.client.trim() || "個人專案";
+    project.type = values.type.trim() || project.type;
+    project.code = code;
+    project.updated = "剛剛";
+    // 修改事項另外存了一份專案名稱，改名時一起更新
+    tasks.filter(task => task.projectId === project.id).forEach(task => { task.project = name; });
+    closeDrawer();
+    render();
+    showToast("已更新專案資訊");
     return;
   }
   const projectDueEditor = event.target.closest("[data-project-due-form]");

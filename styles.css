@@ -252,6 +252,11 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .breadcrumb button { padding: 0; color: inherit; background: none; border: 0; cursor: pointer; }
 .detail-title { display: flex; align-items: center; gap: 12px; }
 .detail-title h1 { min-width: 0; margin: 0; font-size: 32px; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.detail-edit { flex: 0 0 auto; display: grid; place-items: center; color: var(--muted); border: 1px solid transparent; transition: color .15s ease, background-color .15s ease, border-color .15s ease, transform .15s ease; }
+.detail-edit svg { width: 18px; height: 18px; }
+.detail-edit:hover { color: var(--ink); border-color: var(--line); }
+.detail-edit:active { transform: scale(.94); }
+.detail-edit:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .detail-actions { display: flex; gap: 8px; }
 .project-tabs { display: flex; gap: 24px; margin-bottom: 26px; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .project-tab { position: relative; flex: 0 0 auto; padding: 0 0 12px; color: var(--muted); background: transparent; border: 0; cursor: pointer; font-size: 14px; font-weight: 700; }
@@ -642,7 +647,7 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .drawer-body { padding: 24px 26px 40px; }
 .scrim { position: fixed; z-index: 50; inset: 0; background: rgba(16, 17, 15, .42); }
 .form-stack { display: grid; gap: 17px; }
-.form-field { display: grid; gap: 6px; }
+.form-field { display: grid; align-content: start; gap: 6px; } /* 並排欄位有說明文字時，不讓旁邊的輸入框被拉高 */
 .form-field label { font-size: 13px; font-weight: 750; }
 .form-field input, .form-field select, .form-field textarea { width: 100%; padding: 10px 11px; color: var(--ink); background: #fbf9f2; border: 1px solid var(--line); border-radius: 8px; }
 .form-field textarea { min-height: 110px; resize: vertical; }
@@ -935,6 +940,7 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .page { padding: 22px 14px 92px; }
   .page-head { align-items: flex-start; margin-bottom: 22px; }
   .page-head h1, .detail-title h1 { font-size: 26px; }
+  .detail-edit { width: 44px; height: 44px; }
   .date-stamp { display: none; }
   .prototype-inline { display: inline-flex; }
   .page-side .prototype-badge { display: none; }
