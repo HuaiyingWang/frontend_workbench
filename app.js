@@ -416,7 +416,7 @@ function renderProjects() {
   const filtered = state.filter === "全部" ? projects : state.filter === "進行中" ? projects.filter(p => p.statusClass !== "done") : projects.filter(p => p.status === state.filter);
   return `<div class="page">
     ${pageHead("專案", "從最近的製作狀態切入，保留每個網站的素材、修改與技術脈絡。", `<div class="page-action-group"><button type="button" class="outline-button" data-action="manage-project-stages">管理階段</button><button class="primary-button" data-action="new-project">${icon("plus")}<span>建立專案</span></button></div>`)}
-    <div class="toolbar">
+    <div class="toolbar library-toolbar">
       <div class="toolbar-group" aria-label="專案篩選">${["全部", "進行中", ...projectStages.map(stage => stage.label)].map(label => `<button class="filter-chip ${state.filter === label ? "is-active" : ""}" data-filter="${escapeHtml(label)}">${escapeHtml(label)}</button>`).join("")}</div>
       <input class="small-search" id="projectSearch" type="search" placeholder="搜尋專案或客戶" aria-label="搜尋專案或客戶">
     </div>

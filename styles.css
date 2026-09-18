@@ -127,6 +127,9 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .page-side { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .page-side .prototype-badge { margin-bottom: 0; }
 .page-action-group { display: flex; align-items: center; gap: 8px; }
+/* 頁首按鈕不斷行；空間不足時由左側說明文字換行 */
+.page-side { flex-shrink: 0; }
+.page-side .prototype-badge, .page-action-group .outline-button, .page-action-group .primary-button { white-space: nowrap; }
 .prototype-inline { display: none; margin: 9px 0 0; }
 
 .focus-strip { display: grid; grid-template-columns: 1.45fr .8fr .8fr; min-height: 184px; margin-bottom: 34px; overflow: hidden; color: #f6f5ed; background: #22241f; border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -898,6 +901,8 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .mobile-menu { display: inline-flex; }
   .quiet-button span, .primary-button span { display: none; }
   .top-actions .quiet-button, .top-actions .primary-button { width: 40px; padding: 0; }
+  /* 頁首按鈕保留文字且不斷行；空間不足時由左側說明文字換行 */
+  .page-head .page-action-group .primary-button span { display: inline; }
   .command-trigger, .primary-button, .quiet-button, .outline-button, .filter-chip, .project-tab, .nav-item { min-height: 44px; }
   .field-copy-button { min-height: 44px; }
   .top-actions .quiet-button, .top-actions .primary-button, .icon-button { width: 44px; height: 44px; }
@@ -959,10 +964,11 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .page-side .prototype-badge { display: none; }
   .page-action-group { align-items: stretch; flex-direction: column-reverse; }
   .page-action-group .outline-button, .page-action-group .primary-button { min-height: 44px; }
-  .library-page .page-head { align-items: stretch; flex-direction: column; gap: 14px; }
-  .library-page .page-action-group { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
-  .library-page .page-action-group .outline-button, .library-page .page-action-group .primary-button { width: 100%; }
-  .library-page .page-action-group .primary-button span { display: inline; }
+  /* 頁首有兩顆操作按鈕時（專案、素材、套件、提示詞）：按鈕移到標題下方，左右各半並顯示文字 */
+  .page-head:has(.page-action-group) { align-items: stretch; flex-direction: column; gap: 14px; }
+  .page-head .page-action-group { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .page-head .page-action-group .outline-button, .page-head .page-action-group .primary-button { width: 100%; justify-content: center; }
+  .page-head .page-action-group .primary-button span { display: inline; }
   .focus-strip { min-height: 0; margin-bottom: 26px; }
   .focus-project-link { padding: 66px 70px 20px 20px; }
   .focus-switch { top: 14px; right: 14px; min-height: 38px; }
