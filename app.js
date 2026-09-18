@@ -423,7 +423,7 @@ function renderProjectDetail(project) {
         <div class="breadcrumb"><button data-route="projects">專案</button><span>/</span><span>${escapeHtml(project.client)}</span></div>
         <div class="detail-title"><span class="project-mini">${escapeHtml(project.code)}</span><h1>${escapeHtml(project.name)}</h1><button type="button" class="icon-button detail-edit" data-action="edit-project-info" aria-label="編輯專案名稱與基本資料" title="編輯專案資訊">${icon("edit")}</button></div>
       </div>
-      <div class="detail-actions"><button class="outline-button" data-copy="${escapeHtml(project.path || `C:/Projects/${project.id}`)}">${icon("copy")}複製專案路徑</button><button class="primary-button" data-action="capture">${icon("plus")}新增修改</button></div>
+      <div class="detail-actions"><button type="button" class="outline-button" data-action="duplicate-project">${icon("copy")}建立副本</button><button class="primary-button" data-action="capture">${icon("plus")}新增修改</button></div>
     </header>
     <nav class="project-tabs" aria-label="專案內容">${tabs.map(tab => `<button class="project-tab ${state.projectTab === tab ? "is-active" : ""}" data-tab="${tab}">${tab}</button>`).join("")}</nav>
     <div id="projectTabContent">${renderProjectTab(project)}</div>
@@ -1750,6 +1750,19 @@ function projectInfoForm(project) {
   </form>`;
 }
 
+function projectDuplicateForm(project) {
+  const notes = projectNotes[project.id]?.length || 0;
+  const checks = projectChecklists[project.id]?.length || 0;
+  return `<form class="form-stack" data-project-duplicate-form>
+    <div class="form-field"><label for="projectCopyName">新專案名稱</label><input id="projectCopyName" name="name" required aria-required="true" value="${escapeHtml(`${project.name}（副本）`)}"></div>
+    <div class="duplicate-summary">
+      <div><strong>會一起複製</strong><ul><li>客戶、專案類型、縮寫</li><li>專案入口（網站、測試站、後台、本機資料夾）</li><li>專案筆記 ${notes} 筆</li><li>交付檢查 ${checks} 項（全部重設為未完成）</li></ul></div>
+      <div><strong>不會複製</strong><ul><li>修改事項、聯絡窗口</li><li>FTP／Database 連線資訊</li><li>專案圖片、交付日期</li></ul></div>
+    </div>
+    <button class="primary-button drawer-submit" type="submit">建立副本</button>
+  </form>`;
+}
+
 function projectDueForm(project) {
   return `<form class="form-stack" data-project-due-form>
     <div class="project-stage-summary"><span>正在修改</span><strong>${escapeHtml(project.name)}</strong><small>交付日期會顯示在專案總覽。</small></div>
@@ -2033,6 +2046,11 @@ function drawerContent(type, payload) {
     context: currentProject().name,
     title: "修改目前階段",
     body: projectStageForm(currentProject())
+  };
+  if (type === "duplicate-project") return {
+    context: currentProject().name,
+    title: "建立專案副本",
+    body: projectDuplicateForm(currentProject())
   };
   if (type === "edit-project-info") return {
     context: currentProject().name,
@@ -3020,6 +3038,27 @@ document.addEventListener("submit", async event => {
     closeDrawer();
     render();
     showToast(`專案階段已改為「${selected.label}」`);
+    return;
+  }
+  const projectDuplicator = event.target.closest("[data-project-duplicate-form]");
+  if (projectDuplicator) {
+    event.preventDefault();
+    const source = currentProject();
+    const name = String(new FormData(projectDuplicator).get("name") || "").trim();
+    if (!source || !name) return;
+    const stamp = Date.now();
+    const id = `project-${stamp}`;
+    const copy = { ...structuredClone(source), id, name, status: "製作中", statusClass: "active", revisions: 0, updated: "剛剛", lastOpenedAt: stamp, deliveryDate: "", images: [] };
+    delete copy.isFocus;
+    projects.unshift(copy);
+    projectContacts[id] = [];
+    projectNotes[id] = structuredClone(projectNotes[source.id] || []).map((note, index) => ({ ...note, id: `note-${stamp}-${index}`, updated: "剛剛" }));
+    projectChecklists[id] = structuredClone(projectChecklists[source.id] || []).map((item, index) => ({ ...item, id: `check-${stamp}-${index}`, done: false, updated: "剛剛" }));
+    state.route = `project:${id}`;
+    state.projectTab = "總覽";
+    closeDrawer();
+    render();
+    showToast(`已建立「${name}」`);
     return;
   }
   const projectInfoEditor = event.target.closest("[data-project-info-form]");
