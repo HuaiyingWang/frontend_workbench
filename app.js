@@ -339,8 +339,8 @@ function renderDashboard() {
       </section>
 
       <aside class="section">
-        <div class="section-head"><h2>最近開啟</h2><span class="meta">依使用時間</span></div>
-        <div class="project-stack">${projects.slice(0, 3).map(projectLine).join("")}</div>
+        <div class="section-head"><h2>最近開啟</h2><span class="meta">依開啟時間</span></div>
+        <div class="project-stack">${recentProjects(3).map(projectLine).join("")}</div>
         <div class="resource-row">
           <button class="resource-tile" data-route="assets">${icon("image")}<strong>網站收藏</strong><small>${assets.length} 個網站</small></button>
           <button class="resource-tile" data-route="packages">${icon("package")}<strong>套件庫</strong><small>${packages.length} 個套件</small></button>
@@ -360,10 +360,30 @@ function taskRow(task, managed = false) {
   </article>`;
 }
 
+// 最近開啟：依開啟時間排序；從未開啟過的專案排在後面，改依最後更新時間排序
+function recentProjects(limit) {
+  return projects
+    .map((project, index) => ({ project, index }))
+    .sort((a, b) => (b.project.lastOpenedAt || 0) - (a.project.lastOpenedAt || 0) || projectUpdatedTimestamp(b.project) - projectUpdatedTimestamp(a.project) || a.index - b.index)
+    .slice(0, limit)
+    .map(({ project }) => project);
+}
+
+function formatOpenedAt(timestamp) {
+  const date = new Date(timestamp);
+  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const dayDiff = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(timestamp).setHours(0, 0, 0, 0)) / 86400000);
+  if (dayDiff === 0) return `今天 ${time}`;
+  if (dayDiff === 1) return `昨天 ${time}`;
+  const monthDay = `${String(date.getMonth() + 1).padStart(2, "0")} / ${String(date.getDate()).padStart(2, "0")}`;
+  return date.getFullYear() === new Date().getFullYear() ? monthDay : `${date.getFullYear()} / ${monthDay}`;
+}
+
 function projectLine(project) {
-  return `<button class="project-line" data-project="${project.id}">
-    <span class="project-thumb ${project.tone}">${project.code}</span>
-    <span><span class="project-line-title">${project.name}</span><span class="project-line-meta">${project.status} · ${escapeHtml(formatProjectUpdated(project.updated))}</span></span>
+  const when = project.lastOpenedAt ? `開啟於 ${formatOpenedAt(project.lastOpenedAt)}` : `更新 ${formatProjectUpdated(project.updated)}`;
+  return `<button class="project-line" data-project="${escapeHtml(project.id)}">
+    <span class="project-thumb ${escapeHtml(project.tone)}">${escapeHtml(project.code)}</span>
+    <span><span class="project-line-title">${escapeHtml(project.name)}</span><span class="project-line-meta">${escapeHtml(project.status)} · ${escapeHtml(when)}</span></span>
     ${icon("arrow", "arrow")}
   </button>`;
 }
@@ -949,7 +969,13 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   const nextTasks = structuredClone(snapshot.tasks);
   const nextPackages = structuredClone(snapshot.packages || []);
   const nextPrompts = structuredClone(snapshot.prompts || []);
-  nextProjects.forEach(item => { item.updated = formatProjectUpdated(item.updated); });
+  const openedAt = new Map(projects.map(item => [item.id, item.lastOpenedAt || 0]));
+  nextProjects.forEach(item => {
+    item.updated = formatProjectUpdated(item.updated);
+    // 開啟時間取本機與雲端較新的一方，避免下載時覆蓋掉這台裝置剛開過的紀錄
+    const latestOpened = Math.max(item.lastOpenedAt || 0, openedAt.get(item.id) || 0);
+    if (latestOpened) item.lastOpenedAt = latestOpened;
+  });
   if (preserveImages) {
     nextProjects.forEach(item => { item.images = mergeImages(item.images || [], projectImages.get(item.id) || []); });
     nextTasks.forEach(item => { item.images = mergeImages(item.images || [], taskImages.get(String(item.id)) || []); });
@@ -1022,6 +1048,8 @@ async function restoreLocalData() {
 function fingerprintOf(snapshot) {
   const data = { ...snapshot };
   ["updatedAt", "projectConnections", "sensitiveConnections", "mediaPolicy"].forEach(key => delete data[key]);
+  // 開啟專案只會更新 lastOpenedAt，不算尚未上傳的修改（否則每次打開專案都會擋住自動下載）
+  if (Array.isArray(data.projects)) data.projects = data.projects.map(({ lastOpenedAt, ...project }) => project);
   const text = JSON.stringify(data);
   let hash = 2166136261;
   for (let index = 0; index < text.length; index += 1) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619);
@@ -1432,6 +1460,8 @@ function updateNavigation() {
 
 function navigate(route) {
   state.route = route;
+  const opened = route.startsWith("project:") && projects.find(project => route === `project:${project.id}`);
+  if (opened) { opened.lastOpenedAt = Date.now(); persistLocalData(); }
   state.projectTab = "總覽";
   window.scrollTo({ top: 0, behavior: "smooth" });
   render();
@@ -2937,7 +2967,7 @@ document.addEventListener("submit", async event => {
     const id = `project-${Date.now()}`;
     const template = projectCreator.querySelector(".template-option.is-selected")?.dataset.template || "空白專案";
     const images = (imageDrafts.get("project-new") || []).map(image => ({ ...image }));
-    projects.unshift({ id, code: name.replace(/\s/g, "").slice(0, 2).toUpperCase() || "PR", name, client: values.client.trim() || "個人專案", type: template, status: "製作中", statusClass: "active", revisions: 0, updated: "剛剛", path: values.path.trim(), deliveryDate: String(values.deliveryDate || "").trim(), images, tone: ["coral", "blue", "sage"][projects.length % 3] });
+    projects.unshift({ id, code: name.replace(/\s/g, "").slice(0, 2).toUpperCase() || "PR", name, client: values.client.trim() || "個人專案", type: template, status: "製作中", statusClass: "active", revisions: 0, updated: "剛剛", lastOpenedAt: Date.now(), path: values.path.trim(), deliveryDate: String(values.deliveryDate || "").trim(), images, tone: ["coral", "blue", "sage"][projects.length % 3] });
     if (values.ftp.trim() || values.database.trim()) projectConnections[id] = { ftp: values.ftp.trim(), database: values.database.trim() };
     projectContacts[id] = [];
     projectNotes[id] = [];
