@@ -40,6 +40,8 @@ const DEFAULT_PACKAGE_CATEGORIES = ["穩定使用中", "有新版待測", "相�
 const DEFAULT_PROMPT_CATEGORIES = ["圖片生成", "圖片編修", "短影片", "程式協助", "文案", "除錯分析", "未分類"];
 const packageCategories = [...DEFAULT_PACKAGE_CATEGORIES];
 const promptCategories = [...DEFAULT_PROMPT_CATEGORIES];
+const DEFAULT_CONTACT_ROLES = ["主要窗口", "業務", "技術窗口", "其他"];
+const contactRoles = [...DEFAULT_CONTACT_ROLES];
 
 const tasks = [
   { id: 1, title: "手機版導覽列在 390px 時重疊", projectId: "aurora", project: "Aurora 秋季形象網站", dueDate: "2026-09-14", priority: "high", column: "收件匣", note: "iPhone 13 mini 與 390px 模擬尺寸都會發生。", age: "38 分鐘前", done: false },
@@ -233,13 +235,35 @@ function currentFocusProject() {
 }
 
 const priorityLabels = { high: "高", medium: "一般", low: "低" };
-const projectStages = [
+const DEFAULT_PROJECT_STAGES = [
   { label: "製作中", className: "active", note: "目前正在設計或開發" },
   { label: "等待資料", className: "waiting", note: "等待客戶提供內容或素材" },
   { label: "修改中", className: "revision", note: "正在處理修改與回饋" },
   { label: "待確認", className: "waiting", note: "已送出，等待客戶確認" },
   { label: "已交付", className: "done", note: "專案已完成並交付" }
 ];
+const projectStages = structuredClone(DEFAULT_PROJECT_STAGES);
+// 階段歸類：決定首頁統計與狀態顏色（已交付固定一組，排在最後）
+const STAGE_GROUPS = [{ label: "進行中", className: "active" }, { label: "等待中", className: "waiting" }, { label: "已交付", className: "done" }];
+const RESERVED_STAGE_NAMES = ["全部", "進行中"]; // 專案頁篩選已使用的名稱
+
+function stageGroupLabel(className) {
+  return className === "done" ? "已交付" : className === "waiting" ? "等待中" : "進行中";
+}
+
+function defaultStage() {
+  return projectStages.find(stage => stage.className !== "done") || projectStages[0];
+}
+
+// 套用雲端／本機保存的階段；補上專案正在使用但清單裡沒有的階段，並確保「已交付」排在最後
+function applyProjectStages(savedStages, projectList) {
+  const stages = Array.isArray(savedStages) && savedStages.length ? structuredClone(savedStages) : structuredClone(DEFAULT_PROJECT_STAGES);
+  projectList.forEach(project => {
+    if (project.status && !stages.some(stage => stage.label === project.status)) stages.push({ label: project.status, className: project.statusClass || "active", note: "" });
+  });
+  if (!stages.some(stage => stage.className === "done")) stages.push({ label: "已交付", className: "done", note: "專案已完成並交付" });
+  replaceArray(projectStages, [...stages.filter(stage => stage.className !== "done"), ...stages.filter(stage => stage.className === "done")]);
+}
 
 function formatRevisionDue(date, done = false) {
   if (done) return "已完成";
@@ -391,9 +415,9 @@ function projectLine(project) {
 function renderProjects() {
   const filtered = state.filter === "全部" ? projects : state.filter === "進行中" ? projects.filter(p => p.statusClass !== "done") : projects.filter(p => p.status === state.filter);
   return `<div class="page">
-    ${pageHead("專案", "從最近的製作狀態切入，保留每個網站的素材、修改與技術脈絡。", `<button class="primary-button" data-action="new-project">${icon("plus")}<span>建立專案</span></button>`)}
+    ${pageHead("專案", "從最近的製作狀態切入，保留每個網站的素材、修改與技術脈絡。", `<div class="page-action-group"><button type="button" class="outline-button" data-action="manage-project-stages">管理階段</button><button class="primary-button" data-action="new-project">${icon("plus")}<span>建立專案</span></button></div>`)}
     <div class="toolbar">
-      <div class="toolbar-group" aria-label="專案篩選">${["全部", "進行中", "製作中", "等待資料", "修改中", "待確認", "已交付"].map(label => `<button class="filter-chip ${state.filter === label ? "is-active" : ""}" data-filter="${label}">${label}</button>`).join("")}</div>
+      <div class="toolbar-group" aria-label="專案篩選">${["全部", "進行中", ...projectStages.map(stage => stage.label)].map(label => `<button class="filter-chip ${state.filter === label ? "is-active" : ""}" data-filter="${escapeHtml(label)}">${escapeHtml(label)}</button>`).join("")}</div>
       <input class="small-search" id="projectSearch" type="search" placeholder="搜尋專案或客戶" aria-label="搜尋專案或客戶">
     </div>
     <section class="project-table" aria-label="專案列表">
@@ -407,7 +431,7 @@ function renderProjects() {
 function projectTableRow(project) {
   return `<button class="project-table-row" data-project="${project.id}" data-search="${project.name} ${project.client}">
     <span class="project-name-cell"><span class="project-mini">${project.code}</span><span><strong>${project.name}</strong><small>${project.client}</small></span></span>
-    <span class="table-cell"><span class="status ${project.statusClass}">${project.status}</span></span>
+    <span class="table-cell"><span class="status ${escapeHtml(project.statusClass)}">${escapeHtml(project.status)}</span></span>
     <span class="table-cell"><strong>${String(projectTaskCount(project.id)).padStart(2, "0")}</strong> 件</span>
     <span class="table-cell">${project.type}</span>
     <span class="table-cell">${escapeHtml(formatProjectUpdated(project.updated))}</span>
@@ -491,19 +515,25 @@ function renderProjectImages(project) {
   return `<section class="section project-image-section"><div class="section-head"><div><h2>專案圖片</h2><span class="meta">${images.length} 張 · ${images.filter(image => image.cloudPath).length} 張已同步</span></div></div><div class="project-image-grid">${images.map(image => `<figure>${image.dataUrl ? `<img src="${escapeHtml(image.dataUrl)}" alt="${escapeHtml(image.name)}">` : `<span class="cloud-image-loading">${icon("cloud")}<small>讀取雲端圖片</small></span>`}<figcaption><span>${escapeHtml(image.name)}</span><small>${formatFileSize(image.size)}</small></figcaption></figure>`).join("")}</div></section>`;
 }
 
+// 聯絡人頭像：取姓名第一個字（英文轉大寫），例如「林怡君」→「林」、「amy」→「A」
+function nameInitial(name) {
+  return Array.from(String(name || "").trim())[0]?.toUpperCase() || "?";
+}
+
 function renderContactSummary(project) {
   const contacts = projectContacts[project.id] || [];
-  const primary = contacts.find(contact => contact.role === "主要窗口") || contacts[0];
+  // 角色清單的第一個視為主要窗口，角色改名或調整順序後仍然有效
+  const primary = contacts.find(contact => contact.role === contactRoles[0]) || contacts[0];
   return `<div class="section-head"><h2>業務與窗口</h2><button class="text-button" data-tab="聯絡窗口">管理 ${icon("arrow")}</button></div>
-    ${primary ? `<div class="contact-summary"><span class="contact-avatar">${escapeHtml(primary.name.slice(-2))}</span><span><strong>${escapeHtml(primary.name)}</strong><small>${escapeHtml(primary.role)} · ${escapeHtml(primary.company)}</small></span><button class="icon-button" ${primary.email ? `data-copy="${escapeHtml(primary.email)}" aria-label="複製 ${escapeHtml(primary.name)} 的 Email"` : `disabled aria-label="${escapeHtml(primary.name)} 未填 Email"`}>${icon("copy")}</button></div>` : `<div class="connection-empty"><strong>尚未加入聯絡窗口</strong><span>新增業務或專案窗口，聯絡資訊就會出現在總覽。</span><button class="text-button" data-action="add-contact">新增窗口 ${icon("arrow")}</button></div>`}`;
+    ${primary ? `<div class="contact-summary"><span class="contact-avatar" aria-hidden="true">${escapeHtml(nameInitial(primary.name))}</span><span><strong>${escapeHtml(primary.name)}</strong><small>${escapeHtml(primary.role)} · ${escapeHtml(primary.company)}</small></span><button class="icon-button" ${primary.email ? `data-copy="${escapeHtml(primary.email)}" aria-label="複製 ${escapeHtml(primary.name)} 的 Email"` : `disabled aria-label="${escapeHtml(primary.name)} 未填 Email"`}>${icon("copy")}</button></div>` : `<div class="connection-empty"><strong>尚未加入聯絡窗口</strong><span>新增業務或專案窗口，聯絡資訊就會出現在總覽。</span><button class="text-button" data-action="add-contact">新增窗口 ${icon("arrow")}</button></div>`}`;
 }
 
 function renderContactTab(project) {
   const contacts = projectContacts[project.id] || [];
   return `<section class="section contact-section">
-    <div class="section-head"><div><h2>業務與聯絡窗口</h2><span class="meta">${contacts.length} 位 · 原型假資料</span></div><button class="primary-button" data-action="add-contact">${icon("plus")}新增窗口</button></div>
+    <div class="section-head"><div><h2>業務與聯絡窗口</h2><span class="meta">${contacts.length} 位 · 原型假資料</span></div><div class="page-action-group"><button type="button" class="outline-button" data-action="manage-contact-roles">管理角色</button><button class="primary-button" data-action="add-contact">${icon("plus")}新增窗口</button></div></div>
     ${contacts.length ? `<div class="contact-list">${contacts.map(contact => `<article class="contact-row">
-      <span class="contact-avatar">${escapeHtml(contact.name.slice(-2))}</span>
+      <span class="contact-avatar" aria-hidden="true">${escapeHtml(nameInitial(contact.name))}</span>
       <div class="contact-identity"><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.role)} · ${escapeHtml(contact.company)}</span><small>${escapeHtml(contact.note || "尚未加入備註")}</small></div>
       <div class="contact-channel"><button ${contact.phone ? `data-copy="${escapeHtml(contact.phone)}" aria-label="複製 ${escapeHtml(contact.name)} 的電話"` : "disabled"}>${icon("copy")}<span>${escapeHtml(contact.phone || "未填電話")}</span></button><button ${contact.email ? `data-copy="${escapeHtml(contact.email)}" aria-label="複製 ${escapeHtml(contact.name)} 的 Email"` : "disabled"}>${icon("copy")}<span>${escapeHtml(contact.email || "未填 Email")}</span></button></div>
       <div class="contact-actions"><button class="outline-button" data-contact-edit="${contact.id}">修改</button><button class="contact-delete" data-contact-delete="${contact.id}">刪除</button></div>
@@ -773,6 +803,8 @@ function plainDataSnapshot() {
     siteCategories: structuredClone(siteCategories),
     packageCategories: structuredClone(packageCategories),
     promptCategories: structuredClone(promptCategories),
+    projectStages: structuredClone(projectStages),
+    contactRoles: structuredClone(contactRoles),
     projectContacts: structuredClone(projectContacts),
     projectNotes: structuredClone(projectNotes),
     projectChecklists: structuredClone(projectChecklists),
@@ -1000,6 +1032,9 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   replaceRecord(projectNotes, structuredClone(snapshot.projectNotes || {}));
   replaceRecord(projectChecklists, structuredClone(snapshot.projectChecklists || {}));
   replaceRecord(projectConnections, structuredClone(snapshot.projectConnections || {}));
+  applyProjectStages(snapshot.projectStages, nextProjects);
+  const roles = [...new Set([...(snapshot.contactRoles || DEFAULT_CONTACT_ROLES), ...Object.values(projectContacts).flat().map(contact => contact.role).filter(Boolean)])].filter(role => role !== "其他");
+  replaceArray(contactRoles, [...roles, "其他"]);
 }
 
 // 本機暫存改用 IndexedDB：github.io 同帳號的所有 Pages 共用一個 origin，localStorage 約 5MB 會不夠用
@@ -1495,6 +1530,7 @@ async function copyText(value, successMessage = "已複製") {
 
 function openDrawer(type, payload = {}) {
   drawerReturnFocus = document.activeElement;
+  state.contactDraft = null;
   const content = drawerContent(type, payload);
   drawerContext.textContent = content.context;
   drawerTitle.textContent = content.title;
@@ -1506,11 +1542,33 @@ function openDrawer(type, payload = {}) {
   (drawerBody.querySelector("input, textarea, button") || document.querySelector("#drawerClose"))?.focus();
 }
 
+// 抽屜已開啟時切換內容（例如從表單進入管理清單），保留原本關閉後要還原焦點的位置
+function refreshDrawer(type, payload = {}) {
+  const content = drawerContent(type, payload);
+  drawerContext.textContent = content.context;
+  drawerTitle.textContent = content.title;
+  drawerBody.innerHTML = content.body;
+  (drawerBody.querySelector("input, textarea, select, button") || document.querySelector("#drawerClose"))?.focus();
+}
+
 function closeDrawer() {
   drawer.setAttribute("inert", "");
   drawer.classList.remove("is-open");
   drawer.setAttribute("aria-hidden", "true");
   setTimeout(() => { scrim.hidden = true; drawerReturnFocus?.focus?.(); }, 220);
+}
+
+// 刪除按鈕需點兩次：第一次進入確認狀態，3.5 秒內未再點擊就還原
+function armDeleteButton(button) {
+  button.dataset.armed = "true";
+  button.classList.add("is-armed");
+  button.textContent = "再次點擊刪除";
+  setTimeout(() => {
+    if (!button.isConnected) return;
+    button.dataset.armed = "false";
+    button.classList.remove("is-armed");
+    button.textContent = "刪除";
+  }, 3500);
 }
 
 function formatFileSize(bytes = 0) {
@@ -1734,8 +1792,50 @@ function projectCreateForm() {
 function projectStageForm(project) {
   return `<form class="form-stack" data-project-stage-form>
     <div class="project-stage-summary"><span>正在修改</span><strong>${escapeHtml(project.name)}</strong><small>變更後會同步更新首頁與專案列表。</small></div>
-    <fieldset class="project-stage-options"><legend>選擇目前階段</legend>${projectStages.map(stage => `<label class="project-stage-option"><input type="radio" name="stage" value="${escapeHtml(stage.label)}" ${project.status === stage.label ? "checked" : ""}><span class="status ${stage.className}">${escapeHtml(stage.label)}</span><small>${escapeHtml(stage.note)}</small></label>`).join("")}</fieldset>
+    <fieldset class="project-stage-options"><legend>選擇目前階段</legend>${projectStages.map(stage => `<label class="project-stage-option"><input type="radio" name="stage" value="${escapeHtml(stage.label)}" ${project.status === stage.label ? "checked" : ""}><span class="status ${escapeHtml(stage.className)}">${escapeHtml(stage.label)}</span><small>${escapeHtml(stage.note || stageGroupLabel(stage.className))}</small></label>`).join("")}</fieldset>
     <button class="primary-button drawer-submit" type="submit">儲存專案階段</button>
+    <button class="outline-button drawer-wide-action" type="button" data-drawer-swap="manage-project-stages">管理階段</button>
+  </form>`;
+}
+
+// ========================================
+// 專案階段管理：新增、改名、歸類、排序、刪除
+// ========================================
+
+function stageGroupSelect(selected, locked = false) {
+  const groups = locked ? STAGE_GROUPS.filter(group => group.className === "done") : STAGE_GROUPS.filter(group => group.className !== "done");
+  return `<select id="stageGroup" name="group" ${locked ? "disabled" : ""} aria-describedby="stageGroupHint">${groups.map(group => `<option value="${group.className}" ${group.className === selected ? "selected" : ""}>${group.label}</option>`).join("")}</select>`;
+}
+
+function projectStageManager() {
+  const openStages = projectStages.filter(stage => stage.className !== "done").length;
+  return `<div class="category-manager">
+    <form class="category-create stage-create" data-stage-form>
+      <div class="form-grid"><div class="form-field"><label for="stageName">新增階段</label><input id="stageName" name="stageName" required aria-required="true" maxlength="12" placeholder="例如：上線準備" aria-describedby="stageFormError"></div><div class="form-field"><label for="stageGroup">歸類</label>${stageGroupSelect("active")}</div></div>
+      <small class="category-form-error" id="stageFormError" aria-live="polite"></small>
+      <button class="primary-button" type="submit">新增階段</button>
+    </form>
+    <div class="category-list" data-category-kind="stage" aria-label="專案階段列表">${projectStages.map(stage => {
+      const count = projects.filter(project => project.status === stage.label).length;
+      const locked = stage.className === "done";
+      const onlyOpenStage = !locked && openStages <= 1;
+      return `<div class="category-row" data-category-name="${escapeHtml(stage.label)}" ${locked ? `data-category-locked="true"` : ""}>${categoryDragHandle(stage.label, locked)}<span><strong><span class="status ${escapeHtml(stage.className)}">${escapeHtml(stage.label)}</span></strong><small>${stageGroupLabel(stage.className)} · ${count} 個專案</small></span><div><button type="button" class="outline-button" data-stage-edit="${escapeHtml(stage.label)}">修改</button><button type="button" class="category-delete" data-stage-delete="${escapeHtml(stage.label)}" ${locked || onlyOpenStage ? "disabled" : ""}>刪除</button></div></div>`;
+    }).join("")}</div>
+    <p class="category-footnote" id="stageGroupHint">「歸類」決定首頁統計：進行中與等待中都算進「進行中專案」，等待中會另外列出名稱。刪除階段時，該階段的專案會移到同歸類的第一個階段。</p>
+  </div>`;
+}
+
+function projectStageEditForm(label) {
+  const stage = projectStages.find(item => item.label === label) || { label, className: "active", note: "" };
+  const count = projects.filter(project => project.status === label).length;
+  const locked = stage.className === "done";
+  return `<form class="form-stack" data-stage-form data-old-stage="${escapeHtml(label)}">
+    <div class="category-edit-summary"><strong>${escapeHtml(label)}</strong><span>${count} 個專案會同步更新</span></div>
+    <div class="form-field"><label for="stageName">階段名稱</label><input id="stageName" name="stageName" required aria-required="true" maxlength="12" value="${escapeHtml(label)}" aria-describedby="stageFormError"><small class="category-form-error" id="stageFormError" aria-live="polite"></small></div>
+    <div class="form-field"><label for="stageGroup">歸類</label>${stageGroupSelect(stage.className === "revision" ? "active" : stage.className, locked)}<small id="stageGroupHint">${locked ? "「已交付」的歸類固定，並排在最後。" : "決定首頁「進行中專案」的統計方式。"}</small></div>
+    <div class="form-field"><label for="stageNote">說明</label><input id="stageNote" name="stageNote" maxlength="30" value="${escapeHtml(stage.note || "")}" placeholder="選擇階段時顯示的說明"></div>
+    <button class="primary-button drawer-submit" type="submit">儲存階段</button>
+    <button class="outline-button drawer-wide-action" type="button" data-drawer-swap="manage-project-stages">返回階段列表</button>
   </form>`;
 }
 
@@ -1774,7 +1874,7 @@ function projectDueForm(project) {
 function contactForm(contact = {}) {
   return `<form class="form-stack" data-contact-form data-contact-id="${escapeHtml(contact.id || "")}">
     <div class="form-field"><label for="contactName">姓名</label><input id="contactName" name="name" required value="${escapeHtml(contact.name || "")}" placeholder="例如：林怡君"></div>
-    <div class="form-field"><label for="contactRole">角色</label><select id="contactRole" name="role"><option ${contact.role === "主要窗口" ? "selected" : ""}>主要窗口</option><option ${contact.role === "業務" ? "selected" : ""}>業務</option><option ${contact.role === "技術窗口" ? "selected" : ""}>技術窗口</option><option ${contact.role === "其他" ? "selected" : ""}>其他</option></select></div>
+    <div class="form-field"><div class="field-label-row"><label for="contactRole">角色</label><button type="button" class="text-button field-manage" data-contact-roles-manage>管理角色</button></div><select id="contactRole" name="role">${contactRoles.map(role => `<option ${contact.role === role ? "selected" : ""}>${escapeHtml(role)}</option>`).join("")}</select></div>
     <div class="form-field"><label for="contactCompany">公司／單位</label><input id="contactCompany" name="company" value="${escapeHtml(contact.company || currentProject().client)}" placeholder="公司或合作單位"></div>
     <div class="form-field"><label for="contactPhone">電話</label><input id="contactPhone" name="phone" type="tel" value="${escapeHtml(contact.phone || "")}" placeholder="02-0000-0000"></div>
     <div class="form-field"><label for="contactEmail">Email</label><input id="contactEmail" name="email" type="email" value="${escapeHtml(contact.email || "")}" placeholder="name@example.com"></div>
@@ -1838,31 +1938,35 @@ function categoryEditForm(category) {
   return `<form class="form-stack" data-category-form data-old-category="${escapeHtml(category)}"><div class="category-edit-summary"><strong>${escapeHtml(category)}</strong><span>${count} 個網站會同步更新分類名稱</span></div><div class="form-field"><label for="categoryName">分類名稱</label><input id="categoryName" name="categoryName" required maxlength="18" value="${escapeHtml(category)}"><small class="category-form-error" aria-live="polite"></small></div><button class="primary-button drawer-submit" type="submit">儲存分類名稱</button><button class="outline-button drawer-wide-action" type="button" data-action="manage-categories">返回分類列表</button></form>`;
 }
 
+// 套件、提示詞分類與聯絡角色共用同一套管理介面；fallback 是刪除時資料移入的固定項目
 function libraryCategoryConfig(kind) {
+  if (kind === "contact-role") return { categories: contactRoles, records: Object.values(projectContacts).flat(), field: "role", title: "聯絡角色", unit: "位窗口", placeholder: "例如：設計窗口", manageAction: "manage-contact-roles", editAction: "edit-contact-role", context: "聯絡窗口", fallback: "其他", noun: "角色" };
   return kind === "package"
-    ? { categories: packageCategories, records: packages, field: "state", title: "套件分類", unit: "個套件", placeholder: "例如：動畫與互動", manageAction: "manage-package-categories" }
-    : { categories: promptCategories, records: prompts, field: "type", title: "提示詞分類", unit: "組提示詞", placeholder: "例如：網站企劃", manageAction: "manage-prompt-categories" };
+    ? { categories: packageCategories, records: packages, field: "state", title: "套件分類", unit: "個套件", placeholder: "例如：動畫與互動", manageAction: "manage-package-categories", editAction: "edit-package-category", context: "套件庫", fallback: "未分類", noun: "分類" }
+    : { categories: promptCategories, records: prompts, field: "type", title: "提示詞分類", unit: "組提示詞", placeholder: "例如：網站企劃", manageAction: "manage-prompt-categories", editAction: "edit-prompt-category", context: "提示詞庫", fallback: "未分類", noun: "分類" };
 }
 
 function libraryCategoryManager(kind) {
   const config = libraryCategoryConfig(kind);
+  const draftReturn = kind === "contact-role" && state.contactDraft ? `<button type="button" class="outline-button drawer-wide-action" data-contact-draft-return>返回聯絡窗口表單</button>` : "";
   return `<div class="category-manager">
     <form class="category-create" data-library-category-form data-category-kind="${kind}">
-      <div class="form-field"><label for="libraryCategoryName">新增分類</label><div class="category-create-row"><input id="libraryCategoryName" name="categoryName" required maxlength="18" placeholder="${config.placeholder}"><button class="primary-button" type="submit">新增</button></div><small class="category-form-error" aria-live="polite"></small></div>
+      <div class="form-field"><label for="libraryCategoryName">新增${config.noun}</label><div class="category-create-row"><input id="libraryCategoryName" name="categoryName" required maxlength="18" placeholder="${config.placeholder}"><button class="primary-button" type="submit">新增</button></div><small class="category-form-error" aria-live="polite"></small></div>
     </form>
     <div class="category-list" data-category-kind="${kind}" aria-label="${config.title}列表">${config.categories.map(category => {
       const count = config.records.filter(record => record[config.field] === category).length;
-      const locked = category === "未分類";
-      return `<div class="category-row" data-category-name="${escapeHtml(category)}" ${locked ? `data-category-locked="true"` : ""}>${categoryDragHandle(category, locked)}<span><strong>${escapeHtml(category)}</strong><small>${count} ${config.unit}${locked ? " · 系統分類" : ""}</small></span><div><button class="outline-button" data-library-category-edit="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-library-category-delete="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
+      const locked = category === config.fallback;
+      return `<div class="category-row" data-category-name="${escapeHtml(category)}" ${locked ? `data-category-locked="true"` : ""}>${categoryDragHandle(category, locked)}<span><strong>${escapeHtml(category)}</strong><small>${count} ${config.unit}${locked ? ` · 系統${config.noun}` : ""}</small></span><div><button class="outline-button" data-library-category-edit="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-library-category-delete="${escapeHtml(category)}" data-category-kind="${kind}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
     }).join("")}</div>
-    <p class="category-footnote">刪除使用中的分類時，原有資料會移到「未分類」。</p>
+    <p class="category-footnote">刪除使用中的${config.noun}時，原有資料會移到「${config.fallback}」。</p>
+    ${draftReturn}
   </div>`;
 }
 
 function libraryCategoryEditForm(kind, category) {
   const config = libraryCategoryConfig(kind);
   const count = config.records.filter(record => record[config.field] === category).length;
-  return `<form class="form-stack" data-library-category-form data-category-kind="${kind}" data-old-category="${escapeHtml(category)}"><div class="category-edit-summary"><strong>${escapeHtml(category)}</strong><span>${count} ${config.unit}會同步更新分類名稱</span></div><div class="form-field"><label for="libraryCategoryName">分類名稱</label><input id="libraryCategoryName" name="categoryName" required maxlength="18" value="${escapeHtml(category)}"><small class="category-form-error" aria-live="polite"></small></div><button class="primary-button drawer-submit" type="submit">儲存分類名稱</button><button class="outline-button drawer-wide-action" type="button" data-action="${config.manageAction}">返回分類列表</button></form>`;
+  return `<form class="form-stack" data-library-category-form data-category-kind="${kind}" data-old-category="${escapeHtml(category)}"><div class="category-edit-summary"><strong>${escapeHtml(category)}</strong><span>${count} ${config.unit}會同步更新${config.noun}名稱</span></div><div class="form-field"><label for="libraryCategoryName">${config.noun}名稱</label><input id="libraryCategoryName" name="categoryName" required maxlength="18" value="${escapeHtml(category)}"><small class="category-form-error" aria-live="polite"></small></div><button class="primary-button drawer-submit" type="submit">儲存${config.noun}名稱</button><button class="outline-button drawer-wide-action" type="button" data-drawer-swap="${config.manageAction}">返回${config.noun}列表</button></form>`;
 }
 
 // ========================================
@@ -1876,11 +1980,13 @@ function categoryDragHandle(category, locked) {
 }
 
 function categoryListFor(kind) {
-  return kind === "site" ? siteCategories : libraryCategoryConfig(kind).categories;
+  if (kind === "site") return siteCategories;
+  return kind === "stage" ? projectStages : libraryCategoryConfig(kind).categories;
 }
 
 function categoryManagerMarkup(kind) {
-  return kind === "site" ? categoryManager() : libraryCategoryManager(kind);
+  if (kind === "site") return categoryManager();
+  return kind === "stage" ? projectStageManager() : libraryCategoryManager(kind);
 }
 
 /**
@@ -1893,7 +1999,8 @@ function commitCategoryOrder(listEl, focusCategory = "") {
   const list = categoryListFor(kind);
   const names = [...listEl.querySelectorAll("[data-category-name]")].map(row => row.dataset.categoryName);
   if (names.length !== list.length) return;
-  list.splice(0, list.length, ...names);
+  // 階段是物件（依 label 對應），其餘分類是字串
+  list.splice(0, list.length, ...names.map(name => list.find(item => (item.label ?? item) === name)));
   render();
   drawerBody.innerHTML = categoryManagerMarkup(kind);
   if (focusCategory) drawerBody.querySelector(`[data-category-name="${CSS.escape(focusCategory)}"] [data-category-drag]`)?.focus();
@@ -2000,6 +2107,10 @@ function drawerContent(type, payload) {
   if (type === "upload") return { context: state.route.startsWith("project:") ? currentProject().name : "網站素材庫", title: "收藏網站", body: assetForm() };
   if (type === "manage-categories") return { context: "網站素材庫", title: "管理分類", body: categoryManager() };
   if (type === "edit-category") return { context: "管理分類", title: "修改分類", body: categoryEditForm(payload.category || "") };
+  if (type === "manage-project-stages") return { context: "專案", title: "管理階段", body: projectStageManager() };
+  if (type === "edit-project-stage-item") return { context: "專案 · 管理階段", title: "修改階段", body: projectStageEditForm(payload.stage || "") };
+  if (type === "manage-contact-roles") return { context: "聯絡窗口", title: "管理角色", body: libraryCategoryManager("contact-role") };
+  if (type === "edit-contact-role") return { context: "聯絡窗口 · 管理角色", title: "修改角色", body: libraryCategoryEditForm("contact-role", payload.category || "") };
   if (type === "manage-package-categories") return { context: "套件庫", title: "管理分類", body: libraryCategoryManager("package") };
   if (type === "edit-package-category") return { context: "套件庫 · 管理分類", title: "修改分類", body: libraryCategoryEditForm("package", payload.category || "") };
   if (type === "manage-prompt-categories") return { context: "提示詞庫", title: "管理分類", body: libraryCategoryManager("prompt") };
@@ -2068,10 +2179,10 @@ function drawerContent(type, payload) {
     body: `<form class="form-stack" data-project-connection-form>${connectionFormFields(projectConnections[currentProject().id] || {})}<button class="primary-button drawer-submit" type="submit">儲存連線資訊</button></form>`
   };
   if (type === "edit-project-entry") return { context: currentProject().name, title: "管理專案入口", body: projectEntryForm(currentProject()) };
-  if (type === "add-contact") return { context: currentProject().name, title: "新增聯絡窗口", body: contactForm() };
+  if (type === "add-contact") return { context: currentProject().name, title: "新增聯絡窗口", body: contactForm(payload.draft || {}) };
   if (type === "edit-contact") {
     const contact = (projectContacts[currentProject().id] || []).find(item => item.id === payload.contactId) || {};
-    return { context: currentProject().name, title: "修改聯絡窗口", body: contactForm(contact) };
+    return { context: currentProject().name, title: "修改聯絡窗口", body: contactForm({ ...contact, ...(payload.draft || {}) }) };
   }
   if (type === "package") {
     const pkg = packages.find(item => item.id === payload.packageId);
@@ -2219,6 +2330,42 @@ document.addEventListener("click", async event => {
   if (imageDrop && !event.target.closest("button")) { imageDrop.querySelector("[data-image-file]")?.click(); return; }
   const fileDrop = event.target.closest("[data-file-drop]");
   if (fileDrop && !event.target.closest("button")) { fileDrop.querySelector("[data-file-input]")?.click(); return; }
+  const drawerSwap = event.target.closest("[data-drawer-swap]")?.dataset.drawerSwap;
+  if (drawerSwap) { refreshDrawer(drawerSwap); return; }
+  const stageEdit = event.target.closest("[data-stage-edit]")?.dataset.stageEdit;
+  if (stageEdit) { refreshDrawer("edit-project-stage-item", { stage: stageEdit }); return; }
+  const stageDeleteButton = event.target.closest("[data-stage-delete]");
+  if (stageDeleteButton) {
+    const label = stageDeleteButton.dataset.stageDelete;
+    const stage = projectStages.find(item => item.label === label);
+    if (!stage || stage.className === "done") return;
+    if (stageDeleteButton.dataset.armed !== "true") { armDeleteButton(stageDeleteButton); return; }
+    const rest = projectStages.filter(item => item !== stage);
+    const target = rest.find(item => stageGroupLabel(item.className) === stageGroupLabel(stage.className)) || rest.find(item => item.className !== "done");
+    if (!target) return;
+    projects.forEach(project => { if (project.status === label) { project.status = target.label; project.statusClass = target.className; } });
+    projectStages.splice(projectStages.indexOf(stage), 1);
+    if (state.filter === label) state.filter = "全部";
+    render();
+    refreshDrawer("manage-project-stages");
+    showToast(`已刪除「${label}」，原有專案已移到「${target.label}」`);
+    return;
+  }
+  const contactRolesButton = event.target.closest("[data-contact-roles-manage]");
+  if (contactRolesButton) {
+    const form = contactRolesButton.closest("[data-contact-form]");
+    state.contactDraft = { contactId: form.dataset.contactId, values: Object.fromEntries(new FormData(form).entries()) };
+    refreshDrawer("manage-contact-roles");
+    return;
+  }
+  if (event.target.closest("[data-contact-draft-return]")) {
+    const draft = state.contactDraft;
+    state.contactDraft = null;
+    // 角色在管理清單裡被刪除時，改回「其他」；改名則沿用原本選項會找不到，同樣退回「其他」
+    if (draft && !contactRoles.includes(draft.values.role)) draft.values.role = "其他";
+    refreshDrawer(draft?.contactId ? "edit-contact" : "add-contact", { contactId: draft?.contactId, draft: draft?.values });
+    return;
+  }
   const projectFilter = event.target.closest("[data-project-filter]")?.dataset.projectFilter;
   if (projectFilter) { state.filter = projectFilter; navigate("projects"); return; }
   const route = event.target.closest("[data-route]")?.dataset.route;
@@ -2351,7 +2498,7 @@ document.addEventListener("click", async event => {
   const libraryCategoryEditButton = event.target.closest("[data-library-category-edit]");
   if (libraryCategoryEditButton) {
     const kind = libraryCategoryEditButton.dataset.categoryKind;
-    openDrawer(kind === "package" ? "edit-package-category" : "edit-prompt-category", { category: libraryCategoryEditButton.dataset.libraryCategoryEdit });
+    refreshDrawer(libraryCategoryConfig(kind).editAction, { category: libraryCategoryEditButton.dataset.libraryCategoryEdit });
     return;
   }
   const libraryCategoryDeleteButton = event.target.closest("[data-library-category-delete]");
@@ -2360,24 +2507,14 @@ document.addEventListener("click", async event => {
     const category = libraryCategoryDeleteButton.dataset.libraryCategoryDelete;
     const config = libraryCategoryConfig(kind);
     if (libraryCategoryDeleteButton.dataset.armed === "true") {
-      config.records.forEach(record => { if (record[config.field] === category) record[config.field] = "未分類"; });
+      config.records.forEach(record => { if (record[config.field] === category) record[config.field] = config.fallback; });
       const index = config.categories.indexOf(category);
       if (index >= 0) config.categories.splice(index, 1);
       render();
-      drawerContext.textContent = kind === "package" ? "套件庫" : "提示詞庫";
-      drawerTitle.textContent = "管理分類";
-      drawerBody.innerHTML = libraryCategoryManager(kind);
-      showToast(`已刪除「${category}」，原有資料已移到未分類`);
+      refreshDrawer(config.manageAction);
+      showToast(`已刪除「${category}」，原有資料已移到${config.fallback}`);
     } else {
-      libraryCategoryDeleteButton.dataset.armed = "true";
-      libraryCategoryDeleteButton.classList.add("is-armed");
-      libraryCategoryDeleteButton.textContent = "再次點擊刪除";
-      setTimeout(() => {
-        if (!libraryCategoryDeleteButton.isConnected) return;
-        libraryCategoryDeleteButton.dataset.armed = "false";
-        libraryCategoryDeleteButton.classList.remove("is-armed");
-        libraryCategoryDeleteButton.textContent = "刪除";
-      }, 3500);
+      armDeleteButton(libraryCategoryDeleteButton);
     }
     return;
   }
@@ -2936,8 +3073,8 @@ document.addEventListener("submit", async event => {
     const error = libraryCategoryEditor.querySelector(".category-form-error");
     const name = field.value.trim().replace(/\s+/g, " ");
     const duplicate = config.categories.some(category => category !== oldCategory && category.toLowerCase() === name.toLowerCase());
-    if (!name || duplicate || name === "未分類") {
-      error.textContent = duplicate || name === "未分類" ? "已有相同名稱的分類，請換一個名稱。" : "請輸入分類名稱。";
+    if (!name || duplicate || name === config.fallback) {
+      error.textContent = duplicate || name === config.fallback ? `已有相同名稱的${config.noun}，請換一個名稱。` : `請輸入${config.noun}名稱。`;
       field.focus();
       return;
     }
@@ -2945,14 +3082,43 @@ document.addEventListener("submit", async event => {
       const index = config.categories.indexOf(oldCategory);
       if (index >= 0) config.categories[index] = name;
       config.records.forEach(record => { if (record[config.field] === oldCategory) record[config.field] = name; });
+      if (state.contactDraft?.values.role === oldCategory) state.contactDraft.values.role = name;
     } else {
       config.categories.splice(Math.max(0, config.categories.length - 1), 0, name);
     }
     render();
-    drawerContext.textContent = kind === "package" ? "套件庫" : "提示詞庫";
-    drawerTitle.textContent = "管理分類";
-    drawerBody.innerHTML = libraryCategoryManager(kind);
-    showToast(oldCategory ? `已將分類改名為「${name}」` : `已新增分類「${name}」`);
+    refreshDrawer(config.manageAction);
+    showToast(oldCategory ? `已將${config.noun}改名為「${name}」` : `已新增${config.noun}「${name}」`);
+    return;
+  }
+  const stageEditor = event.target.closest("[data-stage-form]");
+  if (stageEditor) {
+    event.preventDefault();
+    const oldLabel = stageEditor.dataset.oldStage || "";
+    const field = stageEditor.querySelector('[name="stageName"]');
+    const error = stageEditor.querySelector(".category-form-error");
+    const name = field.value.trim().replace(/\s+/g, " ");
+    const duplicate = projectStages.some(stage => stage.label !== oldLabel && stage.label.toLowerCase() === name.toLowerCase());
+    if (!name || duplicate || RESERVED_STAGE_NAMES.includes(name)) {
+      error.textContent = !name ? "請輸入階段名稱。" : duplicate ? "已有相同名稱的階段，請換一個名稱。" : `「${name}」是專案頁篩選用的名稱，請換一個。`;
+      field.focus();
+      return;
+    }
+    const group = stageEditor.querySelector('[name="group"]')?.value || "active";
+    const stage = projectStages.find(item => item.label === oldLabel);
+    if (stage) {
+      // 「修改中」原本是進行中的另一種顏色，歸類不變時保留
+      const className = stage.className === "done" ? "done" : group === "active" && stage.className === "revision" ? "revision" : group;
+      projects.forEach(project => { if (project.status === oldLabel) { project.status = name; project.statusClass = className; } });
+      if (state.filter === oldLabel) state.filter = name;
+      Object.assign(stage, { label: name, className, note: stageEditor.querySelector('[name="stageNote"]')?.value.trim() || "" });
+    } else {
+      const doneIndex = projectStages.findIndex(item => item.className === "done");
+      projectStages.splice(doneIndex < 0 ? projectStages.length : doneIndex, 0, { label: name, className: group, note: "" });
+    }
+    render();
+    refreshDrawer("manage-project-stages");
+    showToast(oldLabel ? `已更新階段「${name}」` : `已新增階段「${name}」`);
     return;
   }
   const assetEditor = event.target.closest("[data-asset-form]");
@@ -3001,7 +3167,7 @@ document.addEventListener("submit", async event => {
     const id = `project-${Date.now()}`;
     const template = projectCreator.querySelector(".template-option.is-selected")?.dataset.template || "空白專案";
     const images = (imageDrafts.get("project-new") || []).map(image => ({ ...image }));
-    projects.unshift({ id, code: name.replace(/\s/g, "").slice(0, 2).toUpperCase() || "PR", name, client: values.client.trim() || "個人專案", type: template, status: "製作中", statusClass: "active", revisions: 0, updated: "剛剛", lastOpenedAt: Date.now(), path: values.path.trim(), deliveryDate: String(values.deliveryDate || "").trim(), images, tone: ["coral", "blue", "sage"][projects.length % 3] });
+    projects.unshift({ id, code: name.replace(/\s/g, "").slice(0, 2).toUpperCase() || "PR", name, client: values.client.trim() || "個人專案", type: template, status: defaultStage().label, statusClass: defaultStage().className, revisions: 0, updated: "剛剛", lastOpenedAt: Date.now(), path: values.path.trim(), deliveryDate: String(values.deliveryDate || "").trim(), images, tone: ["coral", "blue", "sage"][projects.length % 3] });
     if (values.ftp.trim() || values.database.trim()) projectConnections[id] = { ftp: values.ftp.trim(), database: values.database.trim() };
     projectContacts[id] = [];
     projectNotes[id] = [];
@@ -3048,7 +3214,7 @@ document.addEventListener("submit", async event => {
     if (!source || !name) return;
     const stamp = Date.now();
     const id = `project-${stamp}`;
-    const copy = { ...structuredClone(source), id, name, status: "製作中", statusClass: "active", revisions: 0, updated: "剛剛", lastOpenedAt: stamp, deliveryDate: "", images: [] };
+    const copy = { ...structuredClone(source), id, name, status: defaultStage().label, statusClass: defaultStage().className, revisions: 0, updated: "剛剛", lastOpenedAt: stamp, deliveryDate: "", images: [] };
     delete copy.isFocus;
     projects.unshift(copy);
     projectContacts[id] = [];

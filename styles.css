@@ -476,6 +476,16 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .drawer-wide-action { width: 100%; margin-top: 14px; }
 .category-create { padding-bottom: 22px; }
 .category-create-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+/* 階段新增表單：名稱＋歸類並排，送出按鈕佔滿一列 */
+.stage-create { display: grid; gap: 10px; }
+.stage-create .primary-button { justify-content: center; width: 100%; }
+.stage-create .category-form-error:empty { display: none; }
+/* 表單標籤旁的「管理」連結 */
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.field-manage { min-height: 32px; padding: 4px 6px; border-radius: 6px; font-size: 13px; transition: color .15s ease, background-color .15s ease; }
+.field-manage:hover { color: var(--ink); background: var(--panel); }
+.field-manage:active { transform: scale(.97); }
+.field-manage:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .category-form-error { min-height: 16px; color: var(--danger); font-size: 12px; }
 .category-list { background: var(--sheet); border-top: 2px solid var(--ink); }
 .category-row { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
