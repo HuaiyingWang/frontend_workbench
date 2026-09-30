@@ -1486,7 +1486,7 @@ function updateNavigation() {
   const inboxCount = document.querySelector("#inboxCount");
   if (inboxCount) inboxCount.textContent = String(tasks.filter(task => !task.done).length).padStart(2, "0");
   const websiteCount = document.querySelector("#websiteCount");
-  if (websiteCount) websiteCount.textContent = String(assets.length);
+  if (websiteCount) websiteCount.textContent = String(assets.length).padStart(2, "0");
   const projectCount = document.querySelector("#projectCount");
   if (projectCount) projectCount.textContent = String(projects.length).padStart(2, "0");
   const profileSyncState = document.querySelector("#profileSyncState");
