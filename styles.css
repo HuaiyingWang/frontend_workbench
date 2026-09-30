@@ -80,7 +80,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .nav-item.is-active svg { color: var(--signal); }
 .nav-item svg { width: 19px; height: 19px; }
 .nav-count { min-width: 24px; color: #a4a99d; font-size: 13px; font-variant-numeric: tabular-nums; text-align: center; }
-.nav-count.is-alert { color: var(--signal-deep); background: var(--signal); border-radius: 999px; font-weight: 800; }
+.nav-count.is-alert { padding: 0 0.5rem; color: var(--signal-deep); background: var(--signal); border-radius: 999px; font-weight: 800; }
 
 .sidebar-foot { padding: 16px 14px 14px; border-top: 1px solid #30332e; }
 .storage-line { display: flex; justify-content: space-between; margin: 0 5px 16px; color: #a2a79b; font-size: 13px; }
