@@ -461,15 +461,15 @@ function renderProjectTab(project) {
   if (state.projectTab === "交付檢查") return renderChecklistTab(project);
   if (state.projectTab === "素材") {
     const projectAssets = assets.filter(asset => asset.projectId === project.id);
-    return `<section class="section"><div class="section-head"><div><h2>專案參考網站</h2><span class="meta">${projectAssets.length} 個收藏 · 原型假資料</span></div><button class="primary-button" data-action="upload">${icon("plus")}收藏網站</button></div>${projectAssets.length ? `<div class="asset-grid">${projectAssets.map(assetCard).join("")}</div>` : `<div class="empty-state">${icon("image")}<h2>還沒有參考網站</h2><p>收藏與這個專案相關的官網、活動頁或互動案例。</p><button class="primary-button" data-action="upload">${icon("plus")}收藏第一個網站</button></div>`}</section>`;
+    return `<section class="section"><div class="section-head"><div><h2>專案參考網站</h2><span class="meta">${projectAssets.length} 個收藏 · 原型假資料</span></div><button class="primary-button" data-action="upload">${icon("plus")}收藏網站</button></div>${projectAssets.length ? `<div class="asset-grid">${projectAssets.map(asset => assetCard(asset)).join("")}</div>` : `<div class="empty-state">${icon("image")}<h2>還沒有參考網站</h2><p>收藏與這個專案相關的官網、活動頁或互動案例。</p><button class="primary-button" data-action="upload">${icon("plus")}收藏第一個網站</button></div>`}</section>`;
   }
   if (state.projectTab === "套件") {
     const projectPackages = packages.filter(pkg => pkg.projectIds.includes(project.id));
-    return `<section class="section"><div class="section-head"><h2>此專案使用中的套件</h2><span class="meta">${projectPackages.length} 個套件 · 原型假資料</span></div>${projectPackages.length ? `<div class="package-list">${projectPackages.map(packageRow).join("")}</div>` : `<div class="empty-state">${icon("package")}<h2>尚未登記套件</h2><p>從套件庫編輯關聯專案後，版本資料會顯示在這裡。</p></div>`}</section>`;
+    return `<section class="section"><div class="section-head"><h2>此專案使用中的套件</h2><span class="meta">${projectPackages.length} 個套件 · 原型假資料</span></div>${projectPackages.length ? `<div class="package-list">${projectPackages.map(pkg => packageRow(pkg)).join("")}</div>` : `<div class="empty-state">${icon("package")}<h2>尚未登記套件</h2><p>從套件庫編輯關聯專案後，版本資料會顯示在這裡。</p></div>`}</section>`;
   }
   if (state.projectTab === "AI 提示詞") {
     const projectPrompts = prompts.filter(prompt => prompt.projectIds.includes(project.id));
-    return `<section class="section"><div class="section-head"><div><h2>這個專案使用過的提示詞</h2><span class="meta">${projectPrompts.length} 組 · 與提示詞庫同步</span></div><button class="primary-button" data-action="new-prompt">${icon("plus")}新增提示詞</button></div>${projectPrompts.length ? `<div class="prompt-grid">${projectPrompts.map(promptCard).join("")}</div>` : `<div class="empty-state">${icon("spark")}<h2>尚未關聯提示詞</h2><p>新增提示詞或從提示詞庫修改專案關聯後，就會顯示在這裡。</p><button class="primary-button" data-action="new-prompt">${icon("plus")}新增第一組提示詞</button></div>`}</section>`;
+    return `<section class="section"><div class="section-head"><div><h2>這個專案使用過的提示詞</h2><span class="meta">${projectPrompts.length} 組 · 與提示詞庫同步</span></div><button class="primary-button" data-action="new-prompt">${icon("plus")}新增提示詞</button></div>${projectPrompts.length ? `<div class="prompt-grid">${projectPrompts.map(prompt => promptCard(prompt)).join("")}</div>` : `<div class="empty-state">${icon("spark")}<h2>尚未關聯提示詞</h2><p>新增提示詞或從提示詞庫修改專案關聯後，就會顯示在這裡。</p><button class="primary-button" data-action="new-prompt">${icon("plus")}新增第一組提示詞</button></div>`}</section>`;
   }
   return `<div class="detail-grid">
     <div>
@@ -705,25 +705,30 @@ function assetPreview(asset, detail = false) {
   return `<span class="asset-preview ${previewUrl ? "has-external-image" : "is-fallback"} ${detail ? "asset-preview-detail" : ""}"><span class="asset-fallback" aria-hidden="true"><strong>${escapeHtml(initial)}</strong><small>${escapeHtml(domain)}</small></span>${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(assetTitle(asset))} 網站預覽" loading="lazy">` : ""}</span>`;
 }
 
-function assetCard(asset) {
+// 資源庫清單的排序握把（專案分頁沿用卡片時不顯示）
+function libraryDragHandle(title) {
+  return `<button type="button" class="library-drag" data-library-drag aria-label="調整「${escapeHtml(title)}」的順序，可拖曳或按方向鍵">${icon("grip")}</button>`;
+}
+
+function assetCard(asset, sortable = false) {
   const title = assetTitle(asset);
-  return `<article class="asset-card" data-category="${escapeHtml(asset.category)}" data-search="${escapeHtml(`${title} ${asset.pageUrl || ""} ${asset.category} ${assetProjectName(asset)} ${asset.usage} ${asset.tags || ""}`)}">
+  return `<article class="asset-card" data-library-id="${asset.id}" data-category="${escapeHtml(asset.category)}" data-search="${escapeHtml(`${title} ${asset.pageUrl || ""} ${asset.category} ${assetProjectName(asset)} ${asset.usage} ${asset.tags || ""}`)}">
     <button class="asset-open" data-asset-open="${asset.id}" aria-label="查看 ${escapeHtml(title)}">${assetPreview(asset)}<div class="asset-info"><strong>${escapeHtml(title)}</strong><span><em>${escapeHtml(assetDomain(asset))}</em><em>${escapeHtml(asset.category)}</em></span><small>${escapeHtml(asset.usage || "尚未記錄參考重點")}</small></div></button>
-    <div class="asset-actions"><button data-copy="${escapeHtml(asset.pageUrl || "")}" aria-label="複製 ${escapeHtml(title)} 網址">${icon("copy")}複製網址</button><button data-open-url="${escapeHtml(asset.pageUrl || "")}">開啟</button><button data-asset-edit="${asset.id}">修改</button><button class="asset-delete" data-asset-delete="${asset.id}">刪除</button></div>
+    <div class="asset-actions">${sortable ? libraryDragHandle(title) : ""}<button data-copy="${escapeHtml(asset.pageUrl || "")}" aria-label="複製 ${escapeHtml(title)} 網址">${icon("copy")}複製網址</button><button data-open-url="${escapeHtml(asset.pageUrl || "")}">開啟</button><button data-asset-edit="${asset.id}">修改</button><button class="asset-delete" data-asset-delete="${asset.id}">刪除</button></div>
   </article>`;
 }
 
 function renderAssets() {
   return `<div class="page asset-page library-page">${pageHead("網站素材庫", "收藏值得參考的網站，保留預覽、分類、網址與可套用的設計想法。", `<div class="page-action-group"><button class="outline-button" data-action="manage-categories">管理分類</button><button class="primary-button" data-action="upload" aria-label="收藏網站">${icon("plus")}<span>收藏網站</span></button></div>`)}
     <div class="toolbar asset-toolbar library-toolbar"><div class="toolbar-group">${["全部", ...siteCategories].map((x, i) => `<button class="filter-chip ${i === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋標題、網域、標籤或用途" aria-label="搜尋網站收藏"></div>
-    <section class="asset-grid" data-filter-list>${assets.map(assetCard).join("")}<div class="empty-state in-grid" data-filter-empty hidden><h2>找不到網站</h2><p>換個分類或關鍵字，或收藏新的參考網站。</p></div></section>
+    <section class="asset-grid" data-filter-list data-library-kind="assets">${assets.map(asset => assetCard(asset, true)).join("")}<div class="empty-state in-grid" data-filter-empty hidden><h2>找不到網站</h2><p>換個分類或關鍵字，或收藏新的參考網站。</p></div></section>
   </div>`;
 }
 
 function renderPackages() {
   return `<div class="page library-page">${pageHead("套件庫", "記住哪些版本真正可靠、在哪些專案使用，以及升級前必須檢查什麼。", `<div class="page-action-group"><button class="outline-button" data-action="manage-package-categories">管理分類</button><button class="primary-button" data-action="new-package">${icon("plus")}<span>登記套件</span></button></div>`)}
     <div class="toolbar library-toolbar"><div class="toolbar-group">${["全部", ...packageCategories].map((x,i)=>`<button class="filter-chip ${i===0?"is-active":""}" data-library-filter="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋套件" aria-label="搜尋套件"></div>
-    <section class="package-list" data-filter-list>${packages.map(packageRow).join("")}<div class="empty-state" data-filter-empty hidden><h2>找不到套件</h2><p>換個關鍵字或狀態篩選。</p></div></section>
+    <section class="package-list" data-filter-list data-library-kind="packages">${packages.map(pkg => packageRow(pkg, true)).join("")}<div class="empty-state" data-filter-empty hidden><h2>找不到套件</h2><p>換個關鍵字或狀態篩選。</p></div></section>
   </div>`;
 }
 
@@ -740,26 +745,26 @@ function mediaCountLabel(record) {
   return [record.images?.length ? `${record.images.length} 圖` : "", record.files?.length ? `${record.files.length} 文件` : ""].filter(Boolean).join(" · ");
 }
 
-function packageRow(pkg) {
+function packageRow(pkg, sortable = false) {
   const hasUpdate = pkg.latestVersion && pkg.latestVersion !== pkg.version;
-  return `<article class="package-row" data-category="${escapeHtml(pkg.state)}" data-search="${escapeHtml(`${pkg.name} ${pkg.note} ${pkg.version} ${pkg.latestVersion} ${pkg.compatibility}`)}">
+  return `<article class="package-row" data-library-id="${pkg.id}" data-category="${escapeHtml(pkg.state)}" data-search="${escapeHtml(`${pkg.name} ${pkg.note} ${pkg.version} ${pkg.latestVersion} ${pkg.compatibility}`)}">
     <button class="package-open" data-package="${pkg.id}" aria-label="查看 ${escapeHtml(pkg.name)}"><span class="data-icon">${escapeHtml(pkg.code)}</span><span class="data-main"><strong>${escapeHtml(pkg.name)}</strong><small>${escapeHtml(pkg.note)}</small></span><span class="package-version"><strong>v${escapeHtml(pkg.version)}</strong>${hasUpdate ? `<small>新版 ${escapeHtml(pkg.latestVersion)}</small>` : `<small>目前最新</small>`}</span><span class="data-meta">${packageProjectLabel(pkg)}</span><span class="state-tag ${packageStateClass(pkg.state)}">${escapeHtml(pkg.state)}</span></button>
-    <div class="package-actions"><button data-package-edit="${pkg.id}">修改</button><button class="package-delete" data-package-delete="${pkg.id}">刪除</button></div>
+    <div class="package-actions">${sortable ? libraryDragHandle(pkg.name) : ""}<button data-package-edit="${pkg.id}">修改</button><button class="package-delete" data-package-delete="${pkg.id}">刪除</button></div>
   </article>`;
 }
 
-function promptCard(prompt) {
+function promptCard(prompt, sortable = false) {
   const version = (prompt.history?.length || 0) + 1;
   const media = mediaCountLabel(prompt);
   const search = `${prompt.title} ${prompt.type} ${prompt.model} ${prompt.body} ${prompt.note} ${prompt.variables.join(" ")}`;
-  return `<article class="prompt-card" data-category="${escapeHtml(prompt.type)}" data-search="${escapeHtml(search)}"><button class="prompt-open" data-prompt="${prompt.id}" aria-label="查看 ${escapeHtml(prompt.title)}"><span class="prompt-card-head"><span class="prompt-type">${escapeHtml(prompt.type)}</span><span>v${version} · ${escapeHtml(prompt.updated)}${media ? ` · ${escapeHtml(media)}` : ""}</span></span><span class="prompt-title">${escapeHtml(prompt.title)}</span><span class="prompt-copy">${escapeHtml(prompt.body)}</span><span class="prompt-card-foot"><span class="variables">${prompt.variables.slice(0, 3).map(v => `<span>{{${escapeHtml(v)}}}</span>`).join("")}</span><span>${escapeHtml(prompt.model)}</span></span></button><div class="prompt-actions"><button data-copy-prompt="${prompt.id}">${icon("copy")}複製</button><button data-prompt-edit="${prompt.id}">修改</button><button class="prompt-delete" data-prompt-delete="${prompt.id}">刪除</button></div></article>`;
+  return `<article class="prompt-card" data-library-id="${prompt.id}" data-category="${escapeHtml(prompt.type)}" data-search="${escapeHtml(search)}"><button class="prompt-open" data-prompt="${prompt.id}" aria-label="查看 ${escapeHtml(prompt.title)}"><span class="prompt-card-head"><span class="prompt-type">${escapeHtml(prompt.type)}</span><span>v${version} · ${escapeHtml(prompt.updated)}${media ? ` · ${escapeHtml(media)}` : ""}</span></span><span class="prompt-title">${escapeHtml(prompt.title)}</span><span class="prompt-copy">${escapeHtml(prompt.body)}</span><span class="prompt-card-foot"><span class="variables">${prompt.variables.slice(0, 3).map(v => `<span>{{${escapeHtml(v)}}}</span>`).join("")}</span><span>${escapeHtml(prompt.model)}</span></span></button><div class="prompt-actions">${sortable ? libraryDragHandle(prompt.title) : ""}<button data-copy-prompt="${prompt.id}">${icon("copy")}複製</button><button data-prompt-edit="${prompt.id}">修改</button><button class="prompt-delete" data-prompt-delete="${prompt.id}">刪除</button></div></article>`;
 }
 
 function renderPrompts() {
   const types = ["全部", ...promptCategories];
   return `<div class="page library-page">${pageHead("提示詞庫", "把有效提示詞當成設計資產：快速複製、關聯專案，修改時保留可回查的舊版本。", `<div class="page-action-group"><button class="outline-button" data-action="manage-prompt-categories">管理分類</button><button class="primary-button" data-action="new-prompt">${icon("plus")}<span>新增提示詞</span></button></div>`)}
     <div class="toolbar library-toolbar"><div class="toolbar-group">${types.map((type, index) => `<button class="filter-chip ${index === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(type)}">${escapeHtml(type)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋提示詞" aria-label="搜尋提示詞"></div>
-    <section class="prompt-grid" data-filter-list>${prompts.map(promptCard).join("")}<div class="empty-state in-grid" data-filter-empty ${prompts.length ? "hidden" : ""}><h2>${prompts.length ? "找不到提示詞" : "還沒有提示詞"}</h2><p>${prompts.length ? "換個關鍵字或類型。" : "新增第一組可重複使用的提示詞。"}</p></div></section>
+    <section class="prompt-grid" data-filter-list data-library-kind="prompts">${prompts.map(prompt => promptCard(prompt, true)).join("")}<div class="empty-state in-grid" data-filter-empty ${prompts.length ? "hidden" : ""}><h2>${prompts.length ? "找不到提示詞" : "還沒有提示詞"}</h2><p>${prompts.length ? "換個關鍵字或類型。" : "新增第一組可重複使用的提示詞。"}</p></div></section>
   </div>`;
 }
 
@@ -3465,6 +3470,79 @@ document.addEventListener("keydown", event => {
   if (!sibling || !sibling.classList.contains("category-row") || sibling.dataset.categoryLocked === "true") return;
   listEl.insertBefore(...(event.key === "ArrowUp" ? [row, sibling] : [sibling, row]));
   commitCategoryOrder(listEl, row.dataset.categoryName);
+});
+
+// ── 資源庫清單拖曳排序（素材 / 套件 / 提示詞，滑鼠與觸控共用 Pointer Events）──
+const libraryLists = { assets, packages, prompts };
+let libraryDrag = null;
+
+/**
+ * 依目前 DOM 排列更新資料陣列；不重新 render，保留篩選與搜尋狀態
+ * @param {HTMLElement} listEl - 帶 data-library-kind 的清單容器
+ */
+function commitLibraryOrder(listEl) {
+  const list = libraryLists[listEl.dataset.libraryKind];
+  const ids = [...listEl.querySelectorAll("[data-library-id]")].map(item => item.dataset.libraryId);
+  if (!list || ids.length !== list.length) return;
+  list.splice(0, list.length, ...ids.map(id => list.find(item => item.id === id)));
+  persistLocalData();
+}
+
+document.addEventListener("pointerdown", event => {
+  const handle = event.target.closest("[data-library-drag]");
+  if (!handle) return;
+  const item = handle.closest("[data-library-id]");
+  const listEl = item?.closest("[data-library-kind]");
+  if (!listEl) return;
+  libraryDrag = { item, listEl, order: [...listEl.querySelectorAll("[data-library-id]")].map(el => el.dataset.libraryId) };
+  item.classList.add("is-dragging");
+  handle.setPointerCapture(event.pointerId);
+  event.preventDefault(); // 避免拖曳時選取文字
+});
+
+document.addEventListener("pointermove", event => {
+  if (!libraryDrag) return;
+  // 網格與單欄清單都用 X/Y 判斷；被篩選隱藏的項目沒有尺寸，不會命中
+  const over = [...libraryDrag.listEl.querySelectorAll("[data-library-id]")].find(item => {
+    if (item === libraryDrag.item) return false;
+    const bounds = item.getBoundingClientRect();
+    return event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+  });
+  if (!over) return;
+  const movingForward = Boolean(over.compareDocumentPosition(libraryDrag.item) & Node.DOCUMENT_POSITION_PRECEDING);
+  libraryDrag.listEl.insertBefore(libraryDrag.item, movingForward ? over.nextSibling : over);
+});
+
+function endLibraryDrag() {
+  if (!libraryDrag) return;
+  const { item, listEl, order } = libraryDrag;
+  libraryDrag = null;
+  item.classList.remove("is-dragging");
+  const moved = [...listEl.querySelectorAll("[data-library-id]")].some((el, index) => el.dataset.libraryId !== order[index]);
+  if (!moved) return;
+  commitLibraryOrder(listEl);
+  showToast("已更新排列順序");
+}
+
+document.addEventListener("pointerup", endLibraryDrag);
+document.addEventListener("pointercancel", endLibraryDrag);
+
+// 鍵盤操作：聚焦握把後，上 / 左往前移，下 / 右往後移（跳過被篩選隱藏的項目）
+document.addEventListener("keydown", event => {
+  const backward = event.key === "ArrowUp" || event.key === "ArrowLeft";
+  if (!backward && event.key !== "ArrowDown" && event.key !== "ArrowRight") return;
+  const handle = event.target.closest?.("[data-library-drag]");
+  if (!handle) return;
+  event.preventDefault();
+  const item = handle.closest("[data-library-id]");
+  const listEl = item.closest("[data-library-kind]");
+  const items = [...listEl.querySelectorAll("[data-library-id]")].filter(el => !el.hidden);
+  const target = items[items.indexOf(item) + (backward ? -1 : 1)];
+  if (!target) return;
+  // 移動的是相鄰項目而非聚焦中的項目，焦點才不會跑掉
+  listEl.insertBefore(target, backward ? item.nextSibling : item);
+  commitLibraryOrder(listEl);
+  showToast(backward ? "已往前移一格" : "已往後移一格");
 });
 
 restoreLocalData().then(async () => {

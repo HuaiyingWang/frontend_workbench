@@ -431,7 +431,7 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .asset-actions { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; border-top: 1px solid var(--line); }
 .asset-actions button { min-width: 0; min-height: 34px; padding: 0 9px; color: var(--muted); background: transparent; border: 0; cursor: pointer; font-size: 12px; font-weight: 700; }
 .asset-actions button:hover { color: var(--ink); background: var(--panel); }
-.asset-actions button:first-child { display: inline-flex; align-items: center; gap: 5px; justify-self: stretch; }
+.asset-actions [data-copy] { width: 100%; display: inline-flex; align-items: center; gap: 5px; justify-self: stretch; }
 .asset-actions svg { width: 13px; height: 13px; }
 .asset-actions .asset-delete { color: var(--danger); }
 .asset-actions .asset-delete:hover { background: #f6e4df; }
@@ -586,6 +586,14 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
 .prompt-actions .prompt-delete { color: var(--danger); }
 .prompt-actions .prompt-delete:hover { background: #f6e4df; }
 .prompt-actions .prompt-delete.is-armed { flex: 1.7; color: #fff; background: var(--danger); }
+
+/* 資源庫排序握把：放在各卡片操作列最前面，拖曳或聚焦後按方向鍵調整順序 */
+.asset-actions .library-drag, .package-actions .library-drag, .prompt-actions .library-drag { flex: 0 0 40px; min-width: 40px; display: grid; place-items: center; padding: 0; cursor: grab; touch-action: none; }
+.asset-actions:has(.library-drag) { grid-template-columns: auto 1fr auto auto auto; }
+.asset-actions .library-drag, .package-actions .library-drag { border-right: 1px solid var(--line); }
+.asset-actions .library-drag:active, .package-actions .library-drag:active, .prompt-actions .library-drag:active { cursor: grabbing; color: var(--ink); background: #eeece1; }
+.library-drag svg { width: 16px; height: 16px; }
+.asset-card.is-dragging, .package-row.is-dragging, .prompt-card.is-dragging { position: relative; z-index: 2; background: #f5f3e9; box-shadow: 0 12px 28px rgba(23, 24, 21, .14); } /* 疊在相鄰卡片之上 */
 .prompt-body-input { min-height: 210px !important; font-family: Consolas, "SFMono-Regular", monospace; font-size: 13px; line-height: 1.65; }
 .prompt-detail-head { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .prompt-detail-model { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; margin-top: 14px; padding: 15px 16px; color: #f4f3eb; background: #252722; border-radius: 10px; }
@@ -1041,6 +1049,7 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .package-open > .state-tag { grid-column: 3; grid-row: 1; }
   .package-actions { min-height: 44px; border-top: 1px solid var(--line); border-left: 0; }
   .package-actions button { flex: 1; min-height: 44px; }
+  .asset-actions .library-drag, .package-actions .library-drag, .prompt-actions .library-drag { flex: 0 0 44px; min-width: 44px; }
   .package-project-field > div { grid-template-columns: 1fr; }
   .package-project-field label { min-height: 44px; }
   .package-detail-head { grid-template-columns: 46px minmax(0, 1fr); }
