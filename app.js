@@ -379,7 +379,7 @@ function taskRow(task, managed = false) {
   const due = formatRevisionDue(task.dueDate, task.done);
   return `<article class="task-row ${task.done ? "is-done" : ""}" data-task="${task.id}">
     <button class="task-check" aria-label="${task.done ? "標示為未完成" : "標示為完成"}" aria-pressed="${task.done}">${icon("check")}</button>
-    <div><span class="task-title">${escapeHtml(task.title)}</span><span class="task-project">${escapeHtml(task.project)}${task.images?.length ? `<span class="task-attachment">${icon("image")}${task.images.length} 張</span>` : ""}</span></div>
+    <div><span class="task-title">${escapeHtml(task.title)}</span><span class="task-project">${escapeHtml(task.project)}${task.images?.length ? `<span class="task-attachment">${icon("image")}${task.images.length} 張</span>` : ""}${task.files?.length ? `<span class="task-attachment">${icon("file")}${task.files.length} 個文件</span>` : ""}</span></div>
     <div class="task-side"><span class="priority ${task.priority}" role="img" aria-label="${priorityLabels[task.priority]}優先級"></span><span class="due ${due === "今天" ? "is-hot" : ""}">${due}</span>${managed ? `<button class="task-inline-action" data-revision-edit="${task.id}">修改</button>` : ""}</div>
   </article>`;
 }
@@ -549,7 +549,7 @@ function renderRevisionTab(project) {
     <div class="section-head revision-section-head"><div><h2>修改事項</h2><span class="meta">${openCount} 件待處理 · ${doneCount} 件完成 · 原型假資料</span></div><button class="primary-button" data-action="capture">${icon("plus")}新增修改</button></div>
     ${projectTasks.length ? `<div class="revision-ledger">${projectTasks.map(task => `<article class="revision-row ${task.done ? "is-done" : ""}" data-task="${task.id}">
       <button class="task-check" aria-label="${task.done ? "標示為未完成" : "標示為完成"}" aria-pressed="${task.done}">${icon("check")}</button>
-      <button class="revision-main" data-revision-edit="${task.id}"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(task.note || "尚未加入處理備註")}${task.images?.length ? `<em class="revision-image-count">${icon("image")}${task.images.length} 張圖片</em>` : ""}</span></button>
+      <button class="revision-main" data-revision-edit="${task.id}"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(task.note || "尚未加入處理備註")}${task.images?.length ? `<em class="revision-image-count">${icon("image")}${task.images.length} 張圖片</em>` : ""}${task.files?.length ? `<em class="revision-image-count">${icon("file")}${task.files.length} 個文件</em>` : ""}</span></button>
       <div class="revision-state"><span class="revision-stage stage-${task.done ? "done" : task.column === "收件匣" ? "inbox" : task.column === "處理中" ? "working" : task.column === "待確認" ? "review" : "todo"}">${task.done ? "完成" : escapeHtml(task.column)}</span><small><span class="priority ${task.priority}" role="img" aria-label="${priorityLabels[task.priority]}優先級"></span>${priorityLabels[task.priority]} · ${formatRevisionDue(task.dueDate, task.done)}</small></div>
       <div class="revision-actions"><button class="outline-button" data-revision-edit="${task.id}">修改</button><button class="revision-delete" data-revision-delete="${task.id}">刪除</button></div>
     </article>`).join("")}</div>` : `<div class="empty-state">${icon("list")}<h2>還沒有修改事項</h2><p>先記下第一筆調整需求，之後可補上期限、優先級與處理階段。</p><button class="primary-button" data-action="capture">${icon("plus")}新增第一筆修改</button></div>`}
@@ -772,7 +772,7 @@ function renderInbox() {
   const columns = ["收件匣", "待處理", "處理中", "待確認"];
   const completedTasks = tasks.filter(task => task.done);
   return `<div class="page">${pageHead("修改收件匣", "先快速捕捉需求，再放進正確的專案與處理階段。", `<button class="primary-button" data-action="capture">${icon("plus")}<span>記一筆修改</span></button>`)}
-    <section class="inbox-board">${columns.map(column => { const items = tasks.filter(task => !task.done && task.column === column); return `<div class="inbox-column"><div class="column-head"><h2>${column}</h2><span>${String(items.length).padStart(2, "0")}</span></div>${items.map(task => `<button class="revision-card" data-revision-edit="${task.id}"><strong>${escapeHtml(task.title)}</strong><span class="revision-project">${escapeHtml(task.project)}${task.images?.length ? `<span class="revision-card-images">${icon("image")}${task.images.length}</span>` : ""}</span><span class="revision-foot"><span><span class="priority ${task.priority}" role="img" aria-label="${priorityLabels[task.priority]}優先級"></span>${priorityLabels[task.priority]}</span><span>${escapeHtml(task.age || formatRevisionDue(task.dueDate))}</span></span></button>`).join("") || `<div class="empty-state" style="padding:35px 10px;background:transparent;border:0"><p>此階段目前沒有項目</p></div>`}</div>`; }).join("")}</section>
+    <section class="inbox-board">${columns.map(column => { const items = tasks.filter(task => !task.done && task.column === column); return `<div class="inbox-column"><div class="column-head"><h2>${column}</h2><span>${String(items.length).padStart(2, "0")}</span></div>${items.map(task => `<button class="revision-card" data-revision-edit="${task.id}"><strong>${escapeHtml(task.title)}</strong><span class="revision-project">${escapeHtml(task.project)}${task.images?.length ? `<span class="revision-card-images">${icon("image")}${task.images.length}</span>` : ""}${task.files?.length ? `<span class="revision-card-images">${icon("file")}${task.files.length}</span>` : ""}</span><span class="revision-foot"><span><span class="priority ${task.priority}" role="img" aria-label="${priorityLabels[task.priority]}優先級"></span>${priorityLabels[task.priority]}</span><span>${escapeHtml(task.age || formatRevisionDue(task.dueDate))}</span></span></button>`).join("") || `<div class="empty-state" style="padding:35px 10px;background:transparent;border:0"><p>此階段目前沒有項目</p></div>`}</div>`; }).join("")}</section>
     <section class="completed-revisions" aria-labelledby="completedRevisionTitle">
       <div class="completed-revisions-head"><div><span class="eyebrow">處理歷程</span><h2 id="completedRevisionTitle">已完成紀錄</h2><p>未指定專案的修改也會保留在這裡，不會因完成而消失。</p></div><strong>${String(completedTasks.length).padStart(2, "0")}</strong></div>
       ${completedTasks.length ? `<div class="completed-revisions-toolbar"><div class="toolbar-group" aria-label="已完成紀錄篩選">${["全部", "未指定專案", "已歸屬專案"].map((label, index) => `<button class="filter-chip ${index === 0 ? "is-active" : ""}" data-completed-filter="${label}">${label}</button>`).join("")}</div><input class="small-search" data-completed-search type="search" placeholder="搜尋完成內容或專案" aria-label="搜尋已完成修改"></div>
@@ -786,7 +786,7 @@ function completedRevisionRow(task) {
   const assignment = task.projectId ? "已歸屬專案" : "未指定專案";
   return `<article class="completed-revision-row" data-completed-row data-assignment="${assignment}" data-completed-search="${escapeHtml(`${task.title} ${projectLabel} ${task.note || ""}`)}">
     <span class="completed-revision-check" aria-hidden="true">${icon("check")}</span>
-    <button class="completed-revision-main" data-revision-edit="${task.id}"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(task.note || "尚未加入處理備註")}${task.images?.length ? `<em class="revision-image-count">${icon("image")}${task.images.length} 張圖片</em>` : ""}</span></button>
+    <button class="completed-revision-main" data-revision-edit="${task.id}"><strong>${escapeHtml(task.title)}</strong><span>${escapeHtml(task.note || "尚未加入處理備註")}${task.images?.length ? `<em class="revision-image-count">${icon("image")}${task.images.length} 張圖片</em>` : ""}${task.files?.length ? `<em class="revision-image-count">${icon("file")}${task.files.length} 個文件</em>` : ""}</span></button>
     <div class="completed-revision-context"><span>${escapeHtml(projectLabel)}</span><small>${escapeHtml(task.completedAt || task.age || "已完成")} · 原階段 ${escapeHtml(task.column)}</small></div>
     <div class="completed-revision-actions"><button class="outline-button" data-revision-reopen="${task.id}">重新開啟</button><button class="outline-button" data-revision-edit="${task.id}">修改</button><button class="revision-delete" data-revision-delete="${task.id}">刪除</button></div>
   </article>`;
@@ -931,7 +931,10 @@ function cloudFileRecord(file) {
 function withoutDeviceImages(snapshot) {
   const copy = structuredClone(snapshot);
   copy.projects.forEach(project => { if (project.images) project.images = project.images.map(cloudImageRecord); });
-  copy.tasks.forEach(task => { if (task.images) task.images = task.images.map(cloudImageRecord); });
+  copy.tasks.forEach(task => {
+    if (task.images) task.images = task.images.map(cloudImageRecord);
+    if (task.files) task.files = task.files.map(cloudFileRecord);
+  });
   copy.packages.forEach(pkg => {
     if (pkg.images) pkg.images = pkg.images.map(cloudImageRecord);
     if (pkg.files) pkg.files = pkg.files.map(cloudFileRecord);
@@ -954,6 +957,7 @@ function allImageOwners() {
 
 function allFileOwners() {
   return [
+    ...tasks.map(task => ({ kind: "revisions", ownerId: String(task.id), files: task.files || [] })),
     ...packages.map(pkg => ({ kind: "packages", ownerId: pkg.id, files: pkg.files || [] })),
     ...prompts.map(prompt => ({ kind: "prompts", ownerId: prompt.id, files: prompt.files || [] }))
   ];
@@ -999,7 +1003,7 @@ function replaceRecord(target, value) {
 function applyDataSnapshot(snapshot, preserveImages = true) {
   if (!snapshot || snapshot.schemaVersion !== 1 || !Array.isArray(snapshot.projects) || !Array.isArray(snapshot.tasks)) throw new Error("這不是可辨識的工作台 JSON 格式。");
   const projectImages = new Map(projects.map(item => [item.id, item.images]));
-  const taskImages = new Map(tasks.map(item => [String(item.id), item.images]));
+  const taskMedia = new Map(tasks.map(item => [String(item.id), { images: item.images, files: item.files }]));
   const packageMedia = new Map(packages.map(item => [item.id, { images: item.images, files: item.files }]));
   const promptMedia = new Map(prompts.map(item => [item.id, { images: item.images, files: item.files }]));
   const nextProjects = structuredClone(snapshot.projects);
@@ -1015,7 +1019,10 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   });
   if (preserveImages) {
     nextProjects.forEach(item => { item.images = mergeImages(item.images || [], projectImages.get(item.id) || []); });
-    nextTasks.forEach(item => { item.images = mergeImages(item.images || [], taskImages.get(String(item.id)) || []); });
+    nextTasks.forEach(item => {
+      item.images = mergeImages(item.images || [], taskMedia.get(String(item.id))?.images || []);
+      item.files = mergeFiles(item.files || [], taskMedia.get(String(item.id))?.files || []);
+    });
     nextPackages.forEach(item => {
       item.images = mergeImages(item.images || [], packageMedia.get(item.id)?.images || []);
       item.files = mergeFiles(item.files || [], packageMedia.get(item.id)?.files || []);
@@ -1901,6 +1908,7 @@ function revisionForm(task = {}) {
     <div class="form-field"><label for="revisionDue">預計完成日</label><input id="revisionDue" name="dueDate" type="date" value="${escapeHtml(task.dueDate || "")}"></div>
     <div class="form-field"><label for="revisionNote">處理備註</label><textarea id="revisionNote" name="note" placeholder="記錄畫面位置、重現方式或等待確認的內容。">${escapeHtml(task.note || "")}</textarea></div>
     ${imageUploadField(uploadKey, task.images || [], "需求圖片")}
+    ${fileUploadField(uploadKey, task.files || [], "需求文件")}
     ${task.attachments?.length ? `<div class="legacy-attachments"><div class="form-section-head"><strong>客戶附件</strong><span>${task.attachments.length} 個舊資料附件</span></div>${task.attachments.map(file => `<button type="button" class="attachment-download" data-download-attachment="${escapeHtml(file.id)}"><span>${icon("download")}<strong>${escapeHtml(file.name)}</strong></span><small>${formatFileSize(file.size)}</small></button>`).join("")}</div>` : ""}
     ${task.id ? `<label class="form-check"><input name="done" type="checkbox" ${task.done ? "checked" : ""}><span>${icon("check")}此修改已完成</span></label>` : ""}
     <button class="primary-button drawer-submit" type="submit">${task.id ? "儲存修改事項" : "加入修改收件匣"}</button>
@@ -2680,7 +2688,7 @@ document.addEventListener("click", async event => {
     if (deleteRevisionButton.dataset.armed === "true") {
       const index = tasks.findIndex(task => task.id === Number(deleteRevisionButton.dataset.revisionDelete));
       if (index >= 0) {
-        queueMediaDeletes(tasks[index].images || []);
+        queueMediaDeletes([...(tasks[index].images || []), ...(tasks[index].files || [])]);
         tasks.splice(index, 1);
       }
       render();
@@ -3272,6 +3280,7 @@ document.addEventListener("submit", async event => {
     const existingId = Number(revisionEditor.dataset.revisionId);
     const uploadKey = revisionEditor.querySelector("[data-image-uploader]")?.dataset.uploadKey;
     const images = (imageDrafts.get(uploadKey) || []).map(image => ({ ...image }));
+    const files = (fileDrafts.get(uploadKey) || []).map(file => ({ ...file }));
     const record = {
       title: values.title.trim(),
       projectId: values.projectId,
@@ -3284,13 +3293,14 @@ document.addEventListener("submit", async event => {
       done: revisionEditor.elements.done?.checked || false,
       completedAt: revisionEditor.elements.done?.checked ? "剛剛" : "",
       images,
+      files,
       attachments: existingId ? (tasks.find(task => task.id === existingId)?.attachments || []) : []
     };
     if (existingId) {
       const index = tasks.findIndex(task => task.id === existingId);
       if (index >= 0) {
-        const retainedIds = new Set(images.map(image => image.id));
-        queueMediaDeletes((tasks[index].images || []).filter(image => !retainedIds.has(image.id)));
+        const retainedIds = new Set([...images, ...files].map(item => item.id));
+        queueMediaDeletes([...(tasks[index].images || []), ...(tasks[index].files || [])].filter(item => !retainedIds.has(item.id)));
         tasks[index] = { ...tasks[index], ...record };
       }
     } else {
@@ -3299,6 +3309,7 @@ document.addEventListener("submit", async event => {
     if (selectedProject) selectedProject.updated = "剛剛";
     if (state.route.startsWith("project:")) state.projectTab = "修改事項";
     imageDrafts.delete(uploadKey);
+    fileDrafts.delete(uploadKey);
     closeDrawer();
     render();
     showToast(existingId ? "已更新修改事項" : "已加入修改收件匣");
