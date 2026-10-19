@@ -448,7 +448,7 @@ function projectTableRow(project) {
 }
 
 function renderProjectDetail(project) {
-  const tabs = ["總覽", "聯絡窗口", "修改事項", "素材", "套件", "AI 提示詞", "專案筆記", "交付檢查"];
+  const tabs = ["總覽", "聯絡窗口", "交付檢查", "修改事項", "素材", "套件", "AI 提示詞", "專案筆記"];
   return `<div class="page">
     <header class="detail-head">
       <div>
