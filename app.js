@@ -590,7 +590,7 @@ function projectChecklist(projectId) {
 }
 
 function checklistRow(item) {
-  return `<article class="delivery-row ${item.done ? "is-done" : ""}" data-check-row data-check-state="${item.done ? "已完成" : "待完成"}" data-check-search="${escapeHtml(`${item.title} ${item.category} ${item.note}`)}"><button class="delivery-check" data-check-toggle="${item.id}" aria-label="${item.done ? "重新開啟" : "標示完成"} ${escapeHtml(item.title)}" aria-pressed="${item.done}">${icon("check")}</button><button class="delivery-main" data-check-edit="${item.id}"><span><span class="delivery-category">${escapeHtml(item.category)}</span><time>${escapeHtml(item.updated)}</time></span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.note || "尚未加入檢查說明")}</small></button><span class="delivery-state">${item.done ? "已完成" : "待完成"}</span><div class="delivery-actions"><button class="outline-button" data-check-edit="${item.id}">修改</button><button class="delivery-delete" data-check-delete="${item.id}">刪除</button></div></article>`;
+  return `<article class="delivery-row ${item.done ? "is-done" : ""}" data-check-row data-check-state="${item.done ? "已完成" : "待完成"}" data-check-search="${escapeHtml(`${item.title} ${item.category} ${item.note}`)}"><button class="delivery-check" data-check-toggle="${item.id}" aria-label="${item.done ? "重新開啟" : "標示完成"} ${escapeHtml(item.title)}" aria-pressed="${item.done}">${icon("check")}</button><button class="delivery-main" data-check-edit="${item.id}"><span><span class="delivery-category">${escapeHtml(item.category)}</span><time>${escapeHtml(item.updated)}</time>${item.images?.length ? `<em class="revision-image-count">${icon("image")}${item.images.length} 張圖片</em>` : ""}${item.files?.length ? `<em class="revision-image-count">${icon("file")}${item.files.length} 個文件</em>` : ""}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.note || "尚未加入檢查說明")}</small></button><span class="delivery-state">${item.done ? "已完成" : "待完成"}</span><div class="delivery-actions"><button class="outline-button" data-check-edit="${item.id}">修改</button><button class="delivery-delete" data-check-delete="${item.id}">刪除</button></div></article>`;
 }
 
 function renderChecklistTab(project) {
@@ -943,6 +943,10 @@ function withoutDeviceImages(snapshot) {
     if (task.images) task.images = task.images.map(cloudImageRecord);
     if (task.files) task.files = task.files.map(cloudFileRecord);
   });
+  Object.values(copy.projectChecklists || {}).flat().forEach(item => {
+    if (item.images) item.images = item.images.map(cloudImageRecord);
+    if (item.files) item.files = item.files.map(cloudFileRecord);
+  });
   copy.packages.forEach(pkg => {
     if (pkg.images) pkg.images = pkg.images.map(cloudImageRecord);
     if (pkg.files) pkg.files = pkg.files.map(cloudFileRecord);
@@ -958,6 +962,7 @@ function allImageOwners() {
   return [
     ...projects.map(project => ({ kind: "projects", ownerId: project.id, images: project.images || [] })),
     ...tasks.map(task => ({ kind: "revisions", ownerId: String(task.id), images: task.images || [] })),
+    ...Object.values(projectChecklists).flat().map(item => ({ kind: "checklists", ownerId: item.id, images: item.images || [] })),
     ...packages.map(pkg => ({ kind: "packages", ownerId: pkg.id, images: pkg.images || [] })),
     ...prompts.map(prompt => ({ kind: "prompts", ownerId: prompt.id, images: prompt.images || [] }))
   ];
@@ -966,6 +971,7 @@ function allImageOwners() {
 function allFileOwners() {
   return [
     ...tasks.map(task => ({ kind: "revisions", ownerId: String(task.id), files: task.files || [] })),
+    ...Object.values(projectChecklists).flat().map(item => ({ kind: "checklists", ownerId: item.id, files: item.files || [] })),
     ...packages.map(pkg => ({ kind: "packages", ownerId: pkg.id, files: pkg.files || [] })),
     ...prompts.map(prompt => ({ kind: "prompts", ownerId: prompt.id, files: prompt.files || [] }))
   ];
@@ -1014,6 +1020,8 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   const taskMedia = new Map(tasks.map(item => [String(item.id), { images: item.images, files: item.files }]));
   const packageMedia = new Map(packages.map(item => [item.id, { images: item.images, files: item.files }]));
   const promptMedia = new Map(prompts.map(item => [item.id, { images: item.images, files: item.files }]));
+  const checklistMedia = new Map(Object.values(projectChecklists).flat().map(item => [item.id, { images: item.images, files: item.files }]));
+  const nextChecklists = structuredClone(snapshot.projectChecklists || {});
   const nextProjects = structuredClone(snapshot.projects);
   const nextTasks = structuredClone(snapshot.tasks);
   const nextPackages = structuredClone(snapshot.packages || []);
@@ -1039,6 +1047,10 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
       item.images = mergeImages(item.images || [], promptMedia.get(item.id)?.images || []);
       item.files = mergeFiles(item.files || [], promptMedia.get(item.id)?.files || []);
     });
+    Object.values(nextChecklists).flat().forEach(item => {
+      item.images = mergeImages(item.images || [], checklistMedia.get(item.id)?.images || []);
+      item.files = mergeFiles(item.files || [], checklistMedia.get(item.id)?.files || []);
+    });
   }
   replaceArray(projects, nextProjects);
   replaceArray(tasks, nextTasks);
@@ -1050,7 +1062,7 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   replaceArray(promptCategories, [...new Set([...(snapshot.promptCategories || DEFAULT_PROMPT_CATEGORIES), ...nextPrompts.map(prompt => prompt.type).filter(Boolean), "未分類"])]);
   replaceRecord(projectContacts, structuredClone(snapshot.projectContacts || {}));
   replaceRecord(projectNotes, structuredClone(snapshot.projectNotes || {}));
-  replaceRecord(projectChecklists, structuredClone(snapshot.projectChecklists || {}));
+  replaceRecord(projectChecklists, nextChecklists);
   replaceRecord(projectConnections, structuredClone(snapshot.projectConnections || {}));
   applyProjectStages(snapshot.projectStages, nextProjects);
   const roles = [...new Set([...(snapshot.contactRoles || DEFAULT_CONTACT_ROLES), ...Object.values(projectContacts).flat().map(contact => contact.role).filter(Boolean)])].filter(role => role !== "其他");
@@ -2140,7 +2152,7 @@ function noteDetail(note) {
 
 function checklistForm(item = {}) {
   const selectedCategory = item.category || "功能";
-  return `<form class="form-stack" data-check-form data-check-id="${escapeHtml(item.id || "")}"><div class="form-field"><label for="checkTitle">檢查項目</label><input id="checkTitle" name="title" required value="${escapeHtml(item.title || "")}" placeholder="例如：表單錯誤與成功狀態"></div><div class="form-field"><label for="checkCategory">檢查分類</label><select id="checkCategory" name="category">${["內容", "響應式", "功能", "SEO", "部署"].map(category => `<option ${category === selectedCategory ? "selected" : ""}>${category}</option>`).join("")}</select></div><div class="form-field"><label for="checkNote">完成標準／備註</label><textarea id="checkNote" name="note" placeholder="寫清楚要檢查哪些尺寸、狀態或環境。">${escapeHtml(item.note || "")}</textarea></div>${item.id ? `<label class="form-check"><input type="checkbox" name="done" ${item.done ? "checked" : ""}><span>${icon("check")}這個項目已完成</span></label>` : ""}<button class="primary-button drawer-submit" type="submit">${item.id ? "儲存檢查項目" : "加入交付清單"}</button></form>`;
+  return `<form class="form-stack" data-check-form data-check-id="${escapeHtml(item.id || "")}"><div class="form-field"><label for="checkTitle">檢查項目</label><input id="checkTitle" name="title" required value="${escapeHtml(item.title || "")}" placeholder="例如：表單錯誤與成功狀態"></div><div class="form-field"><label for="checkCategory">檢查分類</label><select id="checkCategory" name="category">${["內容", "響應式", "功能", "SEO", "部署"].map(category => `<option ${category === selectedCategory ? "selected" : ""}>${category}</option>`).join("")}</select></div><div class="form-field"><label for="checkNote">完成標準／備註</label><textarea id="checkNote" name="note" placeholder="寫清楚要檢查哪些尺寸、狀態或環境。">${escapeHtml(item.note || "")}</textarea></div>${imageUploadField(`check-${item.id || "new"}`, item.images || [], "檢查圖片")}${fileUploadField(`check-${item.id || "new"}`, item.files || [], "檢查文件")}${item.id ? `<label class="form-check"><input type="checkbox" name="done" ${item.done ? "checked" : ""}><span>${icon("check")}這個項目已完成</span></label>` : ""}<button class="primary-button drawer-submit" type="submit">${item.id ? "儲存檢查項目" : "加入交付清單"}</button></form>`;
 }
 
 function assetDetail(asset) {
@@ -2473,8 +2485,12 @@ document.addEventListener("click", async event => {
     if (checkDeleteButton.dataset.armed === "true") {
       const items = projectChecklist(currentProject().id);
       const index = items.findIndex(item => item.id === checkDeleteButton.dataset.checkDelete);
-      if (index >= 0) items.splice(index, 1);
+      if (index >= 0) {
+        queueMediaDeletes([...(items[index].images || []), ...(items[index].files || [])]);
+        items.splice(index, 1);
+      }
       document.querySelector("#projectTabContent").innerHTML = renderChecklistTab(currentProject());
+      persistLocalData();
       showToast("已從原型移除交付檢查");
     } else {
       checkDeleteButton.dataset.armed = "true";
@@ -2983,9 +2999,18 @@ document.addEventListener("submit", async event => {
     const values = Object.fromEntries(new FormData(checkEditor).entries());
     const items = projectChecklist(currentProject().id);
     const existing = items.find(item => item.id === checkEditor.dataset.checkId);
-    const record = { title: values.title.trim(), category: values.category, note: values.note.trim(), done: existing ? values.done === "on" : false, updated: "剛剛" };
-    if (existing) Object.assign(existing, record);
+    const uploadKey = checkEditor.querySelector("[data-image-uploader]")?.dataset.uploadKey;
+    const images = (imageDrafts.get(uploadKey) || []).map(image => ({ ...image }));
+    const files = (fileDrafts.get(uploadKey) || []).map(file => ({ ...file }));
+    const record = { title: values.title.trim(), category: values.category, note: values.note.trim(), done: existing ? values.done === "on" : false, updated: "剛剛", images, files };
+    if (existing) {
+      const retainedIds = new Set([...images, ...files].map(media => media.id));
+      queueMediaDeletes([...(existing.images || []), ...(existing.files || [])].filter(media => !retainedIds.has(media.id)));
+      Object.assign(existing, record);
+    }
     else items.unshift({ id: `check-${Date.now()}`, ...record });
+    imageDrafts.delete(uploadKey);
+    fileDrafts.delete(uploadKey);
     state.projectTab = "交付檢查";
     closeDrawer();
     render();
@@ -3287,7 +3312,7 @@ document.addEventListener("submit", async event => {
     projects.unshift(copy);
     projectContacts[id] = [];
     projectNotes[id] = structuredClone(projectNotes[source.id] || []).map((note, index) => ({ ...note, id: `note-${stamp}-${index}`, updated: "剛剛" }));
-    projectChecklists[id] = structuredClone(projectChecklists[source.id] || []).map((item, index) => ({ ...item, id: `check-${stamp}-${index}`, done: false, updated: "剛剛" }));
+    projectChecklists[id] = structuredClone(projectChecklists[source.id] || []).map((item, index) => ({ ...item, id: `check-${stamp}-${index}`, done: false, updated: "剛剛", images: [], files: [] }));
     state.route = `project:${id}`;
     state.projectTab = "總覽";
     closeDrawer();
