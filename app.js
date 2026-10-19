@@ -125,7 +125,11 @@ let connectionsEnvelope = null;
 let connectionsUnlocked = false;
 let connectionsEdited = false;
 let autoPullCheckedAt = 0;
-const AUTO_PULL_INTERVAL = 30000; // 切回分頁時最多每 30 秒檢查一次，避免耗用 GitHub API 額度
+const AUTO_PULL_INTERVAL = 10000; // 兩次自動檢查至少間隔 10 秒，避免切換分頁時重複耗用 GitHub API 額度
+const AUTO_POLL_INTERVAL = 12000; // 分頁開著時每 12 秒檢查其他裝置的更新
+const AUTO_PUSH_DELAY = 3000; // 停止修改 3 秒後才上傳，連續修改只送一次
+let autoPushTimer = null;
+let conflictNotifiedSha = ""; // 同一個雲端版本只提醒一次，避免每輪檢查都跳提示
 
 function readJsonStorage(storage, key, fallback) {
   try { return JSON.parse(storage.getItem(key)) || fallback; } catch { return fallback; }
@@ -136,6 +140,7 @@ const syncConfig = {
   branch: "main",
   path: "data/state.json",
   rememberToken: false,
+  autoSync: true,
   lastSha: "",
   lastSyncedAt: "",
   emptyRepository: false,
@@ -149,7 +154,9 @@ function syncToken() {
 }
 
 if (syncConfig.repo && syncToken()) {
-  syncStatus = { tone: "ok", title: "GitHub 已設定", detail: syncConfig.lastSyncedAt ? `最近同步：${syncConfig.lastSyncedAt}` : "連線資料已保存在這台裝置。" };
+  syncStatus = syncConfig.autoSync
+    ? { tone: "ok", title: "已連線 GitHub，自動同步中", detail: `每 12 秒檢查一次${syncConfig.lastSyncedAt ? ` · 最近同步：${syncConfig.lastSyncedAt}` : ""}` }
+    : { tone: "ok", title: "GitHub 已設定", detail: syncConfig.lastSyncedAt ? `最近同步：${syncConfig.lastSyncedAt}` : "連線資料已保存在這台裝置。" };
 }
 
 function saveSyncConfig() {
@@ -313,6 +320,7 @@ function renderSettings() {
           <button class="sync-action" data-sync-pull ${connected && !syncBusy ? "" : "disabled"}><span>${icon("download")}</span><strong>從 GitHub 下載</strong><small>以雲端資料更新這台裝置</small></button>
           <button class="sync-action is-primary" data-sync-push ${connected && !syncBusy ? "" : "disabled"}><span>${icon("upload")}</span><strong>上傳目前資料</strong><small>加密後寫入 Private Repository</small></button>
         </div>
+        <label class="sync-choice sync-auto-toggle"><input type="checkbox" data-auto-sync ${syncConfig.autoSync ? "checked" : ""} ${connected ? "" : "disabled"}><span><strong>自動同步</strong><small>修改後約 3 秒自動上傳；分頁開著時每 12 秒檢查其他裝置的更新。兩台裝置同時修改時會停下來提醒，不會自動覆蓋。</small></span></label>
         <p class="sync-footnote">最後同步：${escapeHtml(syncConfig.lastSyncedAt || "尚未同步")} · ${media.total ? `${media.cloud} 張圖片已在雲端，${media.pending} 張等待上傳` : "沒有待同步圖片"}；${documents.total ? `${documents.cloud} 個文件已在雲端，${documents.pending} 個等待上傳` : "沒有待同步文件"}。</p>
       </section>
       <aside class="backup-panel">
@@ -1078,6 +1086,7 @@ function persistLocalData() {
     cached.remoteHash = syncConfig.remoteHash || "";
     cacheRequest("readwrite", store => store.put(cached, WORKBENCH_CACHE_KEY)).catch(() => { /* local cache is best effort */ });
   } catch { /* local cache is best effort */ }
+  scheduleAutoPush();
 }
 
 async function restoreLocalData() {
@@ -1446,6 +1455,8 @@ async function autoPullFromGithub(force = false) {
     const remote = await readGithubState(token, true);
     if (!remote || remote.sha === syncConfig.lastSha) return;
     if (hasUnsyncedChanges()) {
+      if (conflictNotifiedSha === remote.sha) return;
+      conflictNotifiedSha = remote.sha;
       setSyncStatus("error", "雲端有較新的版本", "這個分頁有尚未上傳的修改，為避免覆蓋沒有自動下載。請先按「上傳目前資料」；若沒有要保留的修改，再手動下載。");
       showToast("GitHub 有較新的資料，請到同步設定確認");
       return;
@@ -1455,6 +1466,36 @@ async function autoPullFromGithub(force = false) {
     showToast(connectionsUnlocked ? "已載入 GitHub 最新資料" : "已載入 GitHub 最新資料；連線資訊需輸入解密密碼後顯示");
   } catch (error) {
     setSyncStatus("error", "自動同步未完成", error.message);
+  } finally {
+    syncBusy = false;
+  }
+}
+
+function autoSyncReady() {
+  return Boolean(syncConfig.autoSync && syncConfig.repo && syncToken());
+}
+
+function scheduleAutoPush() {
+  clearTimeout(autoPushTimer);
+  autoPushTimer = autoSyncReady() ? setTimeout(runAutoPush, AUTO_PUSH_DELAY) : null;
+}
+
+/**
+ * 自動上傳：沿用手動上傳流程（含衝突偵測），失敗時只更新狀態，不覆蓋任何一方
+ * @param {boolean} flush - 分頁即將隱藏時立即送出，略過輸入中的檢查
+ */
+async function runAutoPush(flush = false) {
+  autoPushTimer = null;
+  if (!autoSyncReady() || !hasUnsyncedChanges()) return;
+  const typing = document.activeElement?.matches("input, textarea, select") || drawer.classList.contains("is-open");
+  if (syncBusy || (typing && !flush)) { scheduleAutoPush(); return; }
+  syncBusy = true; // 不呼叫 setSyncBusy：避免在設定頁重新 render 打斷操作
+  try {
+    setSyncStatus("busy", "自動同步中", "正在把這台裝置的修改上傳到 GitHub…");
+    await pushToGithub();
+    setSyncStatus("ok", "已自動同步", `最近同步：${syncConfig.lastSyncedAt}，分頁開著時每 12 秒檢查其他裝置的更新。`);
+  } catch (error) {
+    setSyncStatus("error", "自動同步暫停", error.message);
   } finally {
     syncBusy = false;
   }
@@ -1502,7 +1543,7 @@ function updateNavigation() {
   const projectCount = document.querySelector("#projectCount");
   if (projectCount) projectCount.textContent = String(projects.length).padStart(2, "0");
   const profileSyncState = document.querySelector("#profileSyncState");
-  if (profileSyncState) profileSyncState.textContent = syncConfig.repo && syncToken() ? "GitHub 已設定" : "尚未連線";
+  if (profileSyncState) profileSyncState.textContent = autoSyncReady() ? "自動同步中" : syncConfig.repo && syncToken() ? "GitHub 已設定 · 自動同步暫停" : "尚未連線";
 }
 
 function navigate(route) {
@@ -2760,6 +2801,20 @@ document.addEventListener("input", event => {
 });
 
 document.addEventListener("change", async event => {
+  if (event.target.matches("[data-auto-sync]")) {
+    syncConfig.autoSync = event.target.checked;
+    saveSyncConfig();
+    updateNavigation();
+    if (syncConfig.autoSync) {
+      setSyncStatus("ok", "自動同步已開啟", "修改後約 3 秒自動上傳，分頁開著時每 12 秒檢查其他裝置的更新。");
+      runAutoPush();
+      autoPullFromGithub(true);
+    } else {
+      clearTimeout(autoPushTimer);
+      setSyncStatus("idle", "自動同步已暫停", "修改只存在這台裝置，需要時再按「上傳目前資料」。");
+    }
+    return;
+  }
   if (event.target.id === "jsonImportInput") {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -3573,4 +3628,10 @@ restoreLocalData().then(async () => {
 // 切回這個分頁 / 捷徑視窗時，重新檢查 GitHub 是否有其他裝置上傳的新版本
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") autoPullFromGithub();
+  else if (autoPushTimer) { clearTimeout(autoPushTimer); runAutoPush(true); }
 });
+
+// 分頁開著時定時檢查其他裝置的更新（隱藏中的分頁不檢查，節省 API 額度）
+setInterval(() => {
+  if (autoSyncReady() && !document.hidden) autoPullFromGithub();
+}, AUTO_POLL_INTERVAL);
