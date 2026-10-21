@@ -922,6 +922,43 @@ function mergeCollectorSnapshot(snapshot) {
   return { added: assets.length - before, total: snapshot.items.length, categories: usedCategories.size };
 }
 
+// ai-tool-library 匯出格式：{ tools, categories }，或 Supabase library_state 的 { data } / [{ data }] 包裝
+function aiToolLibraryTools(source) {
+  const data = Array.isArray(source) ? source[0]?.data : source?.data || source;
+  return Array.isArray(data?.tools) ? data.tools : null;
+}
+
+/**
+ * 把 ai-tool-library 的工具併入網站素材庫：保留原分類，只新增不覆蓋，網址已收藏過的略過
+ * @param {Object[]} tools - ai-tool-library 的 tools 陣列
+ */
+function mergeAiToolLibrary(tools) {
+  const before = assets.length;
+  const existingIds = new Set(assets.map(asset => asset.id));
+  const existingUrls = new Set(assets.map(asset => normalizeHttpUrl(asset.pageUrl)).filter(Boolean));
+  // 分類名稱比對忽略空白與大小寫（「Skill系列」對應到既有的「Skill 系列」）
+  const categoryKey = name => String(name || "").replace(/\s+/g, "").toLowerCase();
+  const usedCategories = new Set();
+  tools.forEach((tool, index) => {
+    const id = legacyId("aitool", tool.id || index);
+    const pageUrl = normalizeHttpUrl(tool.url) || "";
+    if (existingIds.has(id) || (pageUrl && existingUrls.has(pageUrl))) return;
+    const category = siteCategories.find(item => categoryKey(item) === categoryKey(tool.cat)) || String(tool.cat || "").trim() || "未分類";
+    usedCategories.add(category);
+    const previewUrl = normalizeAssetImage(tool.image) || "";
+    assets.push({
+      id, title: tool.title || `AI 工具 ${index + 1}`, pageUrl, projectId: "", category,
+      preview: previewUrl ? "photo" : "logo", previewUrl, previewSource: previewUrl ? "AI 工具庫" : "",
+      usage: tool.desc || tool.note || "收藏內容待整理", source: "AI 工具庫",
+      tags: Array.isArray(tool.tags) ? tool.tags.join("、") : String(tool.tags || ""), note: tool.desc ? tool.note || "" : "", label: "" // 沒有簡介時備註已當作參考重點，不重複放
+    });
+    existingIds.add(id);
+    if (pageUrl) existingUrls.add(pageUrl);
+  });
+  usedCategories.forEach(category => { if (!siteCategories.includes(category)) siteCategories.splice(Math.max(0, siteCategories.length - 1), 0, category); });
+  return { added: assets.length - before, total: tools.length, categories: usedCategories.size };
+}
+
 function cloudImageRecord(image) {
   const record = { id: image.id, name: image.name, type: image.type, size: image.size };
   if (image.width) record.width = image.width;
@@ -2842,6 +2879,9 @@ document.addEventListener("change", async event => {
         applyDataSnapshot(convertProjectDeskSnapshot(source), false);
       } else if (Number(source?.version) === 2 && Array.isArray(source?.items)) {
         collectorResult = mergeCollectorSnapshot(source);
+      } else if (aiToolLibraryTools(source)) {
+        collectorResult = mergeAiToolLibrary(aiToolLibraryTools(source));
+        if (collectorResult.added < collectorResult.total) collectorResult.skipped = collectorResult.total - collectorResult.added;
       } else {
         await openPortableSnapshot(source);
         if (syncToken()) {
@@ -2852,7 +2892,7 @@ document.addEventListener("change", async event => {
       persistLocalData();
       render();
       const legacy = source?.app === "project-desk";
-      setSyncStatus("ok", collectorResult ? "收藏資料匯入完成" : legacy ? "舊版資料匯入完成" : "備份匯入完成", collectorResult ? `新增 ${collectorResult.added} 筆收藏、保留 ${collectorResult.categories} 組分類；確認後可上傳 GitHub。` : legacy ? `已匯入 ${projects.length} 個專案與 ${tasks.length} 筆修改；輸入解密密碼後即可上傳 GitHub。` : "已在這台裝置套用 JSON 資料；確認後可再上傳 GitHub。");
+      setSyncStatus("ok", collectorResult ? "收藏資料匯入完成" : legacy ? "舊版資料匯入完成" : "備份匯入完成", collectorResult ? `新增 ${collectorResult.added} 筆收藏${collectorResult.skipped ? `、略過 ${collectorResult.skipped} 筆已收藏過的網址` : ""}、保留 ${collectorResult.categories} 組分類；確認後可上傳 GitHub。` : legacy ? `已匯入 ${projects.length} 個專案與 ${tasks.length} 筆修改；輸入解密密碼後即可上傳 GitHub。` : "已在這台裝置套用 JSON 資料；確認後可再上傳 GitHub。");
       showToast(collectorResult ? `已新增 ${collectorResult.added} 筆素材收藏` : legacy ? "project-desk 資料轉換完成" : "已匯入加密 JSON 備份");
     } catch (error) { setSyncStatus("error", "匯入未完成", error.message); showToast(error.message); }
     event.target.value = "";
