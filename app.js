@@ -36,6 +36,9 @@ const assets = [
 ];
 
 const siteCategories = ["企業官網", "活動頁", "電商", "作品集", "互動靈感", "未分類"];
+// 網站分類的第二層：群組順序，以及「分類名稱 → 群組名稱」；網站本身只記分類，不受影響
+const siteGroups = [];
+const siteCategoryGroups = {};
 const DEFAULT_PACKAGE_CATEGORIES = ["穩定使用中", "有新版待測", "相容限定", "未分類"];
 const DEFAULT_PROMPT_CATEGORIES = ["圖片生成", "圖片編修", "短影片", "程式協助", "文案", "除錯分析", "未分類"];
 const packageCategories = [...DEFAULT_PACKAGE_CATEGORIES];
@@ -720,15 +723,66 @@ function libraryDragHandle(title) {
 
 function assetCard(asset, sortable = false) {
   const title = assetTitle(asset);
-  return `<article class="asset-card" data-library-id="${asset.id}" data-category="${escapeHtml(asset.category)}" data-search="${escapeHtml(`${title} ${asset.pageUrl || ""} ${asset.category} ${assetProjectName(asset)} ${asset.usage} ${asset.tags || ""}`)}">
+  return `<article class="asset-card" data-library-id="${asset.id}" data-category="${escapeHtml(asset.category)}" data-search="${escapeHtml(`${title} ${asset.pageUrl || ""} ${siteGroupOf(asset.category)} ${asset.category} ${assetProjectName(asset)} ${asset.usage} ${asset.tags || ""}`)}">
     <button class="asset-open" data-asset-open="${asset.id}" aria-label="查看 ${escapeHtml(title)}">${assetPreview(asset)}<div class="asset-info"><strong>${escapeHtml(title)}</strong><span><em>${escapeHtml(assetDomain(asset))}</em><em>${escapeHtml(asset.category)}</em></span><small>${escapeHtml(asset.usage || "尚未記錄參考重點")}</small></div></button>
     <div class="asset-actions">${sortable ? libraryDragHandle(title) : ""}<button data-copy="${escapeHtml(asset.pageUrl || "")}" aria-label="複製 ${escapeHtml(title)} 網址">${icon("copy")}複製網址</button><button data-open-url="${escapeHtml(asset.pageUrl || "")}">開啟</button><button data-asset-edit="${asset.id}">修改</button><button class="asset-delete" data-asset-delete="${asset.id}">刪除</button></div>
   </article>`;
 }
 
+/**
+ * 舊版以「群組 : 子分類」命名的分類，轉成群組底下的子分類
+ * 子分類名稱已被其他分類使用時保留原名，避免兩個分類合併
+ */
+function migrateSiteCategoryGroups() {
+  siteCategories.forEach((category, index) => {
+    const match = category.match(/^(.+?)\s*[:：]\s*(.+)$/);
+    if (!match) return;
+    const group = match[1].trim();
+    const child = match[2].trim();
+    if (siteCategories.some(item => item !== category && item.toLowerCase() === child.toLowerCase())) return;
+    siteCategories[index] = child;
+    assets.forEach(asset => { if (asset.category === category) asset.category = child; });
+    if (!siteGroups.includes(group)) siteGroups.push(group);
+    siteCategoryGroups[child] = group;
+  });
+}
+
+function siteGroupOf(category) {
+  const group = siteCategoryGroups[category];
+  return siteGroups.includes(group) ? group : "";
+}
+
+// 分類篩選：沒有群組時維持單列；有群組時依群組分段，未分組的放在「其他」
+function siteCategoryFilters() {
+  const chip = (value, label = value, extra = "") => `<button type="button" class="filter-chip" data-library-filter="${escapeHtml(value)}" ${extra}>${escapeHtml(label)}</button>`;
+  const allChip = `<button type="button" class="filter-chip is-active" data-library-filter="全部">全部</button>`;
+  if (!siteGroups.length) return `<div class="toolbar-group">${allChip}${siteCategories.map(category => chip(category)).join("")}</div>`;
+  const row = (label, chips) => `<div class="category-filter-row" role="group" aria-label="${escapeHtml(label || "全部網站")}"><span class="category-filter-label" aria-hidden="true">${escapeHtml(label)}</span><div class="toolbar-group">${chips}</div></div>`;
+  const groupRows = siteGroups.map(group => {
+    const children = siteCategories.filter(category => siteGroupOf(category) === group);
+    if (!children.length) return "";
+    const groupChip = chip(`group:${group}`, "全部", `data-library-categories="${escapeHtml(JSON.stringify(children))}" aria-label="${escapeHtml(group)} 全部"`);
+    return row(group, groupChip + children.map(category => chip(category)).join(""));
+  }).join("");
+  const ungrouped = siteCategories.filter(category => !siteGroupOf(category));
+  return `<div class="category-filter-groups">${row("", allChip)}${groupRows}${ungrouped.length ? row("其他", ungrouped.map(category => chip(category)).join("")) : ""}</div>`;
+}
+
+// 收藏表單的分類選單：依群組分成 optgroup
+function siteCategoryOptions(selected) {
+  const option = category => `<option ${selected === category ? "selected" : ""}>${escapeHtml(category)}</option>`;
+  if (!siteGroups.length) return siteCategories.map(option).join("");
+  const grouped = siteGroups.map(group => {
+    const children = siteCategories.filter(category => siteGroupOf(category) === group);
+    return children.length ? `<optgroup label="${escapeHtml(group)}">${children.map(option).join("")}</optgroup>` : "";
+  }).join("");
+  const ungrouped = siteCategories.filter(category => !siteGroupOf(category));
+  return grouped + (ungrouped.length ? `<optgroup label="其他">${ungrouped.map(option).join("")}</optgroup>` : "");
+}
+
 function renderAssets() {
   return `<div class="page asset-page library-page">${pageHead("網站素材庫", "收藏值得參考的網站，保留預覽、分類、網址與可套用的設計想法。", `<div class="page-action-group"><button class="outline-button" data-action="manage-categories">管理分類</button><button class="primary-button" data-action="upload" aria-label="收藏網站">${icon("plus")}<span>收藏網站</span></button></div>`)}
-    <div class="toolbar asset-toolbar library-toolbar"><div class="toolbar-group">${["全部", ...siteCategories].map((x, i) => `<button class="filter-chip ${i === 0 ? "is-active" : ""}" data-library-filter="${escapeHtml(x)}">${escapeHtml(x)}</button>`).join("")}</div><input class="small-search" data-library-search type="search" placeholder="搜尋標題、網域、標籤或用途" aria-label="搜尋網站收藏"></div>
+    <div class="toolbar asset-toolbar library-toolbar">${siteCategoryFilters()}<input class="small-search" data-library-search type="search" placeholder="搜尋標題、網域、標籤或用途" aria-label="搜尋網站收藏"></div>
     <section class="asset-grid" data-filter-list data-library-kind="assets">${assets.map(asset => assetCard(asset, true)).join("")}<div class="empty-state in-grid" data-filter-empty hidden><h2>找不到網站</h2><p>換個分類或關鍵字，或收藏新的參考網站。</p></div></section>
   </div>`;
 }
@@ -814,6 +868,8 @@ function plainDataSnapshot() {
     packages: structuredClone(packages),
     prompts: structuredClone(prompts),
     siteCategories: structuredClone(siteCategories),
+    siteGroups: structuredClone(siteGroups),
+    siteCategoryGroups: structuredClone(siteCategoryGroups),
     packageCategories: structuredClone(packageCategories),
     promptCategories: structuredClone(promptCategories),
     projectStages: structuredClone(projectStages),
@@ -1095,6 +1151,9 @@ function applyDataSnapshot(snapshot, preserveImages = true) {
   replaceArray(packages, nextPackages);
   replaceArray(prompts, nextPrompts);
   replaceArray(siteCategories, structuredClone(snapshot.siteCategories || ["未分類"]));
+  replaceArray(siteGroups, structuredClone(snapshot.siteGroups || []));
+  replaceRecord(siteCategoryGroups, structuredClone(snapshot.siteCategoryGroups || {}));
+  if (!("siteCategoryGroups" in snapshot)) migrateSiteCategoryGroups(); // 舊資料只轉換一次
   replaceArray(packageCategories, [...new Set([...(snapshot.packageCategories || DEFAULT_PACKAGE_CATEGORIES), ...nextPackages.map(pkg => pkg.state).filter(Boolean), "未分類"])]);
   replaceArray(promptCategories, [...new Set([...(snapshot.promptCategories || DEFAULT_PROMPT_CATEGORIES), ...nextPrompts.map(prompt => prompt.type).filter(Boolean), "未分類"])]);
   replaceRecord(projectContacts, structuredClone(snapshot.projectContacts || {}));
@@ -2014,7 +2073,7 @@ function assetForm(asset = {}) {
     <div class="form-field asset-url-field"><label for="assetPageUrl">網站網址</label><div class="asset-url-input"><input id="assetPageUrl" name="pageUrl" type="url" required value="${escapeHtml(asset.pageUrl || "")}" placeholder="https://example.com" inputmode="url" spellcheck="false"><button type="button" class="outline-button" data-asset-preview-url>${asset.pageUrl ? "重新抓取" : "抓取網站資料"}</button></div><small>依序讀取網站標題、og:image、Twitter Card 與頁面代表圖。</small><input name="previewUrl" id="assetPreviewUrl" type="hidden" value="${escapeHtml(asset.previewUrl || asset.externalUrl || "")}"><input name="previewSource" id="assetPreviewSource" type="hidden" value="${escapeHtml(asset.previewSource || "")}"></div>
     <div class="asset-url-preview ${asset.previewUrl || asset.externalUrl ? "has-image" : ""}" id="assetUrlPreview" aria-live="polite"><img ${asset.previewUrl || asset.externalUrl ? `src="${escapeHtml(asset.previewUrl || asset.externalUrl)}"` : ""} alt="網頁擷取預覽" ${asset.previewUrl || asset.externalUrl ? "" : "hidden"}><span id="assetUrlStatus">${asset.previewUrl || asset.externalUrl ? `已保存${asset.previewSource ? ` · ${escapeHtml(asset.previewSource)}` : ""}` : "貼上網頁網址後抓取預覽；沒有預覽圖時使用預設圖"}</span></div>
     <div class="form-field"><label for="assetName">網站標題</label><input id="assetName" name="title" required value="${escapeHtml(assetTitle(asset) === "未命名網站" ? "" : assetTitle(asset))}" placeholder="抓取後自動帶入，也可以自行修改"></div>
-    <div class="form-grid"><div class="form-field"><label for="assetCategory">網站分類</label><select id="assetCategory" name="category">${siteCategories.map(category => `<option ${selectedCategory === category ? "selected" : ""}>${escapeHtml(category)}</option>`).join("")}</select></div><div class="form-field"><label for="assetSource">收藏來源</label><select id="assetSource" name="source">${["靈感蒐集", "客戶參考", "同業案例", "技術研究", "動效參考"].map(source => `<option ${selectedSource === source ? "selected" : ""}>${source}</option>`).join("")}</select></div></div>
+    <div class="form-grid"><div class="form-field"><label for="assetCategory">網站分類</label><select id="assetCategory" name="category">${siteCategoryOptions(selectedCategory)}</select></div><div class="form-field"><label for="assetSource">收藏來源</label><select id="assetSource" name="source">${["靈感蒐集", "客戶參考", "同業案例", "技術研究", "動效參考"].map(source => `<option ${selectedSource === source ? "selected" : ""}>${source}</option>`).join("")}</select></div></div>
     <div class="form-field"><label for="assetProject">關聯專案</label><select id="assetProject" name="projectId"><option value="">未指定專案</option>${projects.map(project => `<option value="${project.id}" ${defaultProjectId === project.id ? "selected" : ""}>${escapeHtml(project.name)}</option>`).join("")}</select></div>
     <div class="form-grid"><div class="form-field"><label for="assetUsage">參考重點</label><input id="assetUsage" name="usage" value="${escapeHtml(asset.usage || "")}" placeholder="例如：首頁編排、選單動效"></div><div class="form-field"><label for="assetTags">標籤</label><input id="assetTags" name="tags" value="${escapeHtml(asset.tags || "")}" placeholder="品牌、電商、GSAP"></div></div>
     <div class="form-field"><label for="assetNote">收藏備註</label><textarea id="assetNote" name="note" placeholder="記下值得參考的區塊、互動方式或套用想法。">${escapeHtml(asset.note || "")}</textarea></div>
@@ -2022,15 +2081,40 @@ function assetForm(asset = {}) {
   </form>`;
 }
 
+function siteGroupSelect(category) {
+  const current = siteGroupOf(category);
+  const id = `categoryGroup-${siteCategories.indexOf(category)}`;
+  return `<label class="visually-hidden" for="${id}">「${escapeHtml(category)}」所屬群組</label><select id="${id}" class="category-group-select" data-category-group="${escapeHtml(category)}"><option value="">不分組</option>${siteGroups.map(group => `<option ${current === group ? "selected" : ""}>${escapeHtml(group)}</option>`).join("")}</select>`;
+}
+
+function siteGroupManager() {
+  return `<section class="category-group-manager" aria-labelledby="siteGroupHeading">
+    <h3 id="siteGroupHeading" class="category-section-title">分類群組</h3>
+    <form class="category-create" data-site-group-form>
+      <div class="form-field"><label for="siteGroupName">新增群組</label><div class="category-create-row"><input id="siteGroupName" name="groupName" required aria-required="true" maxlength="18" placeholder="例如：AI、分享" aria-describedby="siteGroupError"><button class="primary-button" type="submit">新增</button></div><small class="category-form-error" id="siteGroupError" aria-live="polite"></small></div>
+    </form>
+    ${siteGroups.length ? `<div class="category-list" data-category-kind="site-group" aria-label="分類群組列表">${siteGroups.map(group => {
+      const children = siteCategories.filter(category => siteGroupOf(category) === group);
+      return `<div class="category-row" data-category-name="${escapeHtml(group)}">${categoryDragHandle(group, false)}<span><strong>${escapeHtml(group)}</strong><small>${children.length ? `${children.length} 個分類：${escapeHtml(children.join("、"))}` : "尚未指定分類"}</small></span><div><button type="button" class="outline-button" data-site-group-edit="${escapeHtml(group)}">修改</button><button type="button" class="category-delete" data-site-group-delete="${escapeHtml(group)}">刪除</button></div></div>`;
+    }).join("")}</div>` : `<p class="category-footnote">建立群組後，在下方分類列表選擇每個分類屬於哪個群組。</p>`}
+  </section>
+  <h3 class="category-section-title">網站分類</h3>`;
+}
+
+function siteGroupEditForm(group) {
+  const count = siteCategories.filter(category => siteGroupOf(category) === group).length;
+  return `<form class="form-stack" data-site-group-form data-old-group="${escapeHtml(group)}"><div class="category-edit-summary"><strong>${escapeHtml(group)}</strong><span>${count} 個分類會同步更新群組名稱</span></div><div class="form-field"><label for="siteGroupName">群組名稱</label><input id="siteGroupName" name="groupName" required aria-required="true" maxlength="18" value="${escapeHtml(group)}" aria-describedby="siteGroupError"><small class="category-form-error" id="siteGroupError" aria-live="polite"></small></div><button class="primary-button drawer-submit" type="submit">儲存群組名稱</button><button class="outline-button drawer-wide-action" type="button" data-action="manage-categories">返回分類列表</button></form>`;
+}
+
 function categoryManager() {
-  return `<div class="category-manager">
+  return `<div class="category-manager">${siteGroupManager()}
     <form class="category-create" data-category-form>
       <div class="form-field"><label for="categoryName">新增分類</label><div class="category-create-row"><input id="categoryName" name="categoryName" required maxlength="18" placeholder="例如：餐飲網站"><button class="primary-button" type="submit">新增</button></div><small class="category-form-error" aria-live="polite"></small></div>
     </form>
     <div class="category-list" data-category-kind="site" aria-label="網站分類列表">${siteCategories.map(category => {
       const count = assets.filter(asset => asset.category === category).length;
       const locked = category === "未分類";
-      return `<div class="category-row" data-category-row="${escapeHtml(category)}" data-category-name="${escapeHtml(category)}" ${locked ? `data-category-locked="true"` : ""}>${categoryDragHandle(category, locked)}<span><strong>${escapeHtml(category)}</strong><small>${count} 個網站${locked ? " · 系統分類" : ""}</small></span><div><button class="outline-button" data-category-edit="${escapeHtml(category)}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-category-delete="${escapeHtml(category)}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
+      return `<div class="category-row" data-category-row="${escapeHtml(category)}" data-category-name="${escapeHtml(category)}" ${locked ? `data-category-locked="true"` : ""}>${categoryDragHandle(category, locked)}<span><strong>${escapeHtml(category)}</strong><small>${count} 個網站${locked ? " · 系統分類" : ""}</small></span><div>${siteGroups.length && !locked ? siteGroupSelect(category) : ""}<button class="outline-button" data-category-edit="${escapeHtml(category)}" ${locked ? "disabled" : ""}>修改</button><button class="category-delete" data-category-delete="${escapeHtml(category)}" ${locked ? "disabled" : ""}>刪除</button></div></div>`;
     }).join("")}</div>
     <p class="category-footnote">刪除使用中的分類時，原有網站會移到「未分類」。</p>
   </div>`;
@@ -2084,11 +2168,12 @@ function categoryDragHandle(category, locked) {
 
 function categoryListFor(kind) {
   if (kind === "site") return siteCategories;
+  if (kind === "site-group") return siteGroups;
   return kind === "stage" ? projectStages : libraryCategoryConfig(kind).categories;
 }
 
 function categoryManagerMarkup(kind) {
-  if (kind === "site") return categoryManager();
+  if (kind === "site" || kind === "site-group") return categoryManager();
   return kind === "stage" ? projectStageManager() : libraryCategoryManager(kind);
 }
 
@@ -2106,7 +2191,7 @@ function commitCategoryOrder(listEl, focusCategory = "") {
   list.splice(0, list.length, ...names.map(name => list.find(item => (item.label ?? item) === name)));
   render();
   drawerBody.innerHTML = categoryManagerMarkup(kind);
-  if (focusCategory) drawerBody.querySelector(`[data-category-name="${CSS.escape(focusCategory)}"] [data-category-drag]`)?.focus();
+  if (focusCategory) drawerBody.querySelector(`[data-category-kind="${kind}"] [data-category-name="${CSS.escape(focusCategory)}"] [data-category-drag]`)?.focus();
 }
 
 function focusProjectForm() {
@@ -2210,6 +2295,7 @@ function drawerContent(type, payload) {
   if (type === "upload") return { context: state.route.startsWith("project:") ? currentProject().name : "網站素材庫", title: "收藏網站", body: assetForm() };
   if (type === "manage-categories") return { context: "網站素材庫", title: "管理分類", body: categoryManager() };
   if (type === "edit-category") return { context: "管理分類", title: "修改分類", body: categoryEditForm(payload.category || "") };
+  if (type === "edit-site-group") return { context: "管理分類", title: "修改群組", body: siteGroupEditForm(payload.group || "") };
   if (type === "manage-project-stages") return { context: "專案", title: "管理階段", body: projectStageManager() };
   if (type === "edit-project-stage-item") return { context: "專案 · 管理階段", title: "修改階段", body: projectStageEditForm(payload.stage || "") };
   if (type === "manage-contact-roles") return { context: "聯絡窗口", title: "管理角色", body: libraryCategoryManager("contact-role") };
@@ -2481,7 +2567,7 @@ document.addEventListener("click", async event => {
   if (filter) { state.filter = filter; renderProjectsIntoPage(); return; }
   const libraryFilter = event.target.closest("[data-library-filter]");
   if (libraryFilter) {
-    libraryFilter.parentElement.querySelectorAll("[data-library-filter]").forEach(item => item.classList.toggle("is-active", item === libraryFilter));
+    libraryFilter.closest(".library-toolbar").querySelectorAll("[data-library-filter]").forEach(item => item.classList.toggle("is-active", item === libraryFilter));
     applyLibraryFilter();
     return;
   }
@@ -2577,6 +2663,31 @@ document.addEventListener("click", async event => {
     }
     return;
   }
+  const siteGroupEdit = event.target.closest("[data-site-group-edit]")?.dataset.siteGroupEdit;
+  if (siteGroupEdit) { openDrawer("edit-site-group", { group: siteGroupEdit }); return; }
+  const siteGroupDeleteButton = event.target.closest("[data-site-group-delete]");
+  if (siteGroupDeleteButton) {
+    const group = siteGroupDeleteButton.dataset.siteGroupDelete;
+    if (siteGroupDeleteButton.dataset.armed === "true") {
+      const index = siteGroups.indexOf(group);
+      if (index >= 0) siteGroups.splice(index, 1);
+      Object.keys(siteCategoryGroups).forEach(category => { if (siteCategoryGroups[category] === group) delete siteCategoryGroups[category]; });
+      render();
+      drawerBody.innerHTML = categoryManager();
+      showToast(`已刪除群組「${group}」，底下的分類改為不分組`);
+    } else {
+      siteGroupDeleteButton.dataset.armed = "true";
+      siteGroupDeleteButton.classList.add("is-armed");
+      siteGroupDeleteButton.textContent = "再次點擊刪除";
+      setTimeout(() => {
+        if (!siteGroupDeleteButton.isConnected) return;
+        siteGroupDeleteButton.dataset.armed = "false";
+        siteGroupDeleteButton.classList.remove("is-armed");
+        siteGroupDeleteButton.textContent = "刪除";
+      }, 3500);
+    }
+    return;
+  }
   const categoryEdit = event.target.closest("[data-category-edit]")?.dataset.categoryEdit;
   if (categoryEdit) { openDrawer("edit-category", { category: categoryEdit }); return; }
   const categoryDeleteButton = event.target.closest("[data-category-delete]");
@@ -2586,6 +2697,7 @@ document.addEventListener("click", async event => {
       assets.forEach(asset => { if (asset.category === category) asset.category = "未分類"; });
       const index = siteCategories.indexOf(category);
       if (index >= 0) siteCategories.splice(index, 1);
+      delete siteCategoryGroups[category];
       render();
       drawerBody.innerHTML = categoryManager();
       showToast(`已刪除「${category}」，原有網站已移到未分類`);
@@ -2854,6 +2966,16 @@ document.addEventListener("input", event => {
 });
 
 document.addEventListener("change", async event => {
+  if (event.target.matches("[data-category-group]")) {
+    const category = event.target.dataset.categoryGroup;
+    if (event.target.value) siteCategoryGroups[category] = event.target.value;
+    else delete siteCategoryGroups[category];
+    render();
+    drawerBody.innerHTML = categoryManager();
+    drawerBody.querySelector(`[data-category-group="${CSS.escape(category)}"]`)?.focus();
+    showToast(event.target.value ? `「${category}」已移到「${event.target.value}」` : `「${category}」已改為不分組`);
+    return;
+  }
   if (event.target.matches("[data-auto-sync]")) {
     syncConfig.autoSync = event.target.checked;
     saveSyncConfig();
@@ -2958,12 +3080,14 @@ document.addEventListener("error", event => {
 function applyLibraryFilter() {
   const list = document.querySelector("[data-filter-list]");
   if (!list) return;
-  const category = document.querySelector("[data-library-filter].is-active")?.dataset.libraryFilter || "全部";
+  const activeChip = document.querySelector("[data-library-filter].is-active");
+  const category = activeChip?.dataset.libraryFilter || "全部";
+  const groupCategories = activeChip?.dataset.libraryCategories ? JSON.parse(activeChip.dataset.libraryCategories) : null;
   const query = document.querySelector("[data-library-search]")?.value.trim().toLowerCase() || "";
   const items = [...list.querySelectorAll("[data-category]")];
   let visibleCount = 0;
   items.forEach(item => {
-    const categoryMatch = category === "全部" || item.dataset.category === category;
+    const categoryMatch = category === "全部" || (groupCategories ? groupCategories.includes(item.dataset.category) : item.dataset.category === category);
     const searchText = (item.dataset.search || item.textContent).toLowerCase();
     const visible = categoryMatch && searchText.includes(query);
     item.hidden = !visible;
@@ -3169,6 +3293,34 @@ document.addEventListener("submit", async event => {
     showToast(existing ? "已更新套件與版本紀錄" : "已加入套件庫（原型尚未保存）");
     return;
   }
+  const siteGroupEditor = event.target.closest("[data-site-group-form]");
+  if (siteGroupEditor) {
+    event.preventDefault();
+    const oldGroup = siteGroupEditor.dataset.oldGroup || "";
+    const field = siteGroupEditor.querySelector('[name="groupName"]');
+    const error = siteGroupEditor.querySelector(".category-form-error");
+    const name = field.value.trim().replace(/\s+/g, " ");
+    const duplicate = siteGroups.some(group => group !== oldGroup && group.toLowerCase() === name.toLowerCase());
+    if (!name || duplicate) {
+      error.textContent = duplicate ? "已有相同名稱的群組，請換一個名稱。" : "請輸入群組名稱。";
+      field.setAttribute("aria-invalid", "true");
+      field.focus();
+      return;
+    }
+    if (oldGroup) {
+      const index = siteGroups.indexOf(oldGroup);
+      if (index >= 0) siteGroups[index] = name;
+      Object.keys(siteCategoryGroups).forEach(category => { if (siteCategoryGroups[category] === oldGroup) siteCategoryGroups[category] = name; });
+    } else {
+      siteGroups.push(name);
+    }
+    render();
+    drawerContext.textContent = "網站素材庫";
+    drawerTitle.textContent = "管理分類";
+    drawerBody.innerHTML = categoryManager();
+    showToast(oldGroup ? `已將群組改名為「${name}」` : `已新增群組「${name}」`);
+    return;
+  }
   const categoryEditor = event.target.closest("[data-category-form]");
   if (categoryEditor) {
     event.preventDefault();
@@ -3186,6 +3338,10 @@ document.addEventListener("submit", async event => {
       const index = siteCategories.indexOf(oldCategory);
       if (index >= 0) siteCategories[index] = name;
       assets.forEach(asset => { if (asset.category === oldCategory) asset.category = name; });
+      if (oldCategory in siteCategoryGroups) {
+        siteCategoryGroups[name] = siteCategoryGroups[oldCategory];
+        if (name !== oldCategory) delete siteCategoryGroups[oldCategory];
+      }
     } else {
       siteCategories.splice(Math.max(0, siteCategories.length - 1), 0, name);
     }
