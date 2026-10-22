@@ -2569,6 +2569,11 @@ document.addEventListener("click", async event => {
   if (libraryFilter) {
     libraryFilter.closest(".library-toolbar").querySelectorAll("[data-library-filter]").forEach(item => item.classList.toggle("is-active", item === libraryFilter));
     applyLibraryFilter();
+    // 手機版分類很多、結果被擠到下方：點選後捲到篩選結果
+    if (window.matchMedia("(max-width: 620px)").matches) {
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document.querySelector("[data-filter-list]")?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    }
     return;
   }
   const tab = event.target.closest("[data-tab]")?.dataset.tab;

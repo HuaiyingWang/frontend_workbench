@@ -1060,6 +1060,7 @@ kbd { padding: 2px 6px; color: var(--muted); background: var(--panel); border: 1
   .category-group-select { flex: 1 1 100%; max-width: none; min-height: 44px; }
   .category-filter-row { grid-template-columns: 1fr; gap: 6px; }
   .category-filter-label { padding-top: 0; }
+  [data-filter-list] { scroll-margin-top: 76px; } /* 捲動定位時避開 64px 的固定頂欄 */
   .data-row { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; }
   .package-row { grid-template-columns: 1fr; padding: 10px 0 0; }
   .package-open { grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; padding: 4px 12px 12px; }
